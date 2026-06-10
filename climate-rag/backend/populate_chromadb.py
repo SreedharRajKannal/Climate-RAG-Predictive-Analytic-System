@@ -23,7 +23,8 @@ for doc in docs:
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # Populate ChromaDB
-db = Chroma.from_texts(chunks, embeddings, persist_directory="backend/chroma_db")
+persist_dir = os.path.join(os.path.dirname(__file__), "chroma_db")
+db = Chroma.from_texts(chunks, embeddings, persist_directory=persist_dir)
 db.persist()
 
-print("✅ ChromaDB populated with Sentence‑Transformers embeddings!")
+print(f"✅ ChromaDB populated with Sentence‑Transformers embeddings at {persist_dir}!")
