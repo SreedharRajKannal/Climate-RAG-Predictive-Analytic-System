@@ -22,11 +22,11 @@ collection    = chroma_client.get_or_create_collection(
 chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
 collection    = chroma_client.get_or_create_collection(
     name               = COLLECTION,
-    embedding_function = openai_ef
+    embedding_function = sentence_ef
 )
 
 llm = Ollama(
-    model    = os.getenv("OLLAMA_MODEL", "llama3"),
+    model    = os.getenv("OLLAMA_MODEL", "gemma3"),
     base_url = OLLAMA_HOST
 )
 
