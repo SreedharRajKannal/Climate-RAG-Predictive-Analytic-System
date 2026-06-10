@@ -1,16 +1,16 @@
 import os
-from langchain.text_splitter import CharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings  # ✅ use this instead
 
 # Path to knowledge folder
-knowledge_path = "backend/knowledge"
+knowledge_path = os.path.join(os.path.dirname(__file__), "knowledge")
 
 # Load all .txt files
 docs = []
 for fname in os.listdir(knowledge_path):
     if fname.endswith(".txt"):
-        with open(os.path.join(knowledge_path, fname), "r") as f:
+        with open(os.path.join(knowledge_path, fname), "r", encoding="utf-8") as f:
             docs.append(f.read())
 
 # Split into chunks
@@ -19,11 +19,11 @@ chunks = []
 for doc in docs:
     chunks.extend(splitter.split_text(doc))
 
-# Create embeddings
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+# ✅ Use Sentence‑Transformers model
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # Populate ChromaDB
 db = Chroma.from_texts(chunks, embeddings, persist_directory="backend/chroma_db")
 db.persist()
 
-print("✅ ChromaDB populated with climate safety knowledge!")
+print("✅ ChromaDB populated with Sentence‑Transformers embeddings!")
