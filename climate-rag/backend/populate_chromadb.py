@@ -1,7 +1,7 @@
 import os
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings  # ✅ use this instead
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 # Path to knowledge folder
 knowledge_path = os.path.join(os.path.dirname(__file__), "knowledge")
