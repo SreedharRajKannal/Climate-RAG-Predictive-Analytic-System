@@ -1,0 +1,949 @@
+================================================================
+CLIMATE RAG PREDICTIVE ANALYTICS SYSTEM
+Full Project Context & Code Reference
+================================================================
+
+
+----------------------------------------------------------------
+PROJECT OVERVIEW
+----------------------------------------------------------------
+A real-time climate monitoring system that fetches live weather
+data every 15 minutes, stores it in MySQL, runs it through a
+RAG pipeline (ChromaDB + LangChain), and uses a locally hosted
+Ollama model (Llama3 or Mistral) to generate plain-language
+climate advisories on a React dashboard.
+
+Stack:
+- Weather data   : Open-Meteo API (free, no key needed)
+- Scheduler      : APScheduler
+- Database       : MySQL 8 (Docker)
+- ORM            : SQLAlchemy
+- Vector store   : ChromaDB (local)
+- Embeddings     : sentence-transformers all-MiniLM-L6-v2 (free)
+- RAG framework  : LangChain
+- LLM            : Ollama (Llama3 or Mistral) — runs locally
+- Alert engine   : Custom Python rule-based checker
+- Backend API    : FastAPI
+- Frontend       : React + Tailwind CSS + Recharts
+- Containers     : Docker + Docker Compose
+
+
+----------------------------------------------------------------
+FOLDER STRUCTURE
+----------------------------------------------------------------
+climate-rag/
+├── backend/
+│   ├── main.py
+│   ├── database.py
+│   ├── scheduler.py
+│   ├── alerts.py
+│   ├── rag.py
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── knowledge/
+│       ├── heat.txt
+│       ├── aqi.txt
+│       ├── uv.txt
+│       └── rain.txt
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── api.js
+│   │   ├── index.css
+│   │   └── components/
+│   │       ├── ConditionCard.jsx
+│   │       ├── AdvisoryPanel.jsx
+│   │       └── HistoryChart.jsx
+│   ├── postcss.config.js
+│   ├── tailwind.config.js
+│   └── Dockerfile
+├── docker-compose.yml
+└── .env
+
+
+----------------------------------------------------------------
+.env
+----------------------------------------------------------------
+DB_ROOT_PASSWORD=rootpassword
+DB_USER=climateuser
+DB_PASSWORD=climatepass
+LOCATION_LAT=9.9312
+LOCATION_LON=76.2673
+OLLAMA_MODEL=llama3
+
+
+----------------------------------------------------------------
+docker-compose.yml
+----------------------------------------------------------------
+version: '3.8'
+
+services:
+
+  db:
+    image: mysql:8
+    container_name: climate_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: climate_db
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama
+    container_name: climate_ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  api:
+    build: ./backend
+    container_name: climate_api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      DB_URL: mysql+mysqlconnector://${DB_USER}:${DB_PASSWORD}@db/climate_db
+      OLLAMA_HOST: http://ollama:11434
+      LOCATION_LAT: ${LOCATION_LAT}
+      LOCATION_LON: ${LOCATION_LON}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: climate_frontend
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  mysql_data:
+  ollama_data:
+
+
+----------------------------------------------------------------
+backend/Dockerfile
+----------------------------------------------------------------
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+
+----------------------------------------------------------------
+backend/requirements.txt
+----------------------------------------------------------------
+fastapi
+uvicorn
+sqlalchemy
+mysql-connector-python
+apscheduler
+requests
+langchain
+langchain-community
+chromadb
+sentence-transformers
+python-dotenv
+
+
+----------------------------------------------------------------
+backend/database.py
+----------------------------------------------------------------
+from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker
+from datetime import datetime
+import os
+
+DATABASE_URL = os.getenv("DB_URL")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+class WeatherReading(Base):
+    __tablename__ = "weather_readings"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    location    = Column(String(100))
+    temperature = Column(Float)
+    feels_like  = Column(Float)
+    humidity    = Column(Float)
+    pressure    = Column(Float)
+    wind_speed  = Column(Float)
+    wind_dir    = Column(Float)
+    uv_index    = Column(Float)
+    precip_prob = Column(Float)
+    cloud_cover = Column(Float)
+    aqi         = Column(Float, nullable=True)
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
+
+----------------------------------------------------------------
+backend/scheduler.py
+----------------------------------------------------------------
+import requests
+import os
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+from database import SessionLocal, WeatherReading
+from alerts import check_alerts
+
+LAT = os.getenv("LOCATION_LAT", "9.9312")
+LON = os.getenv("LOCATION_LON", "76.2673")
+
+def fetch_and_store():
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": LAT,
+            "longitude": LON,
+            "current": [
+                "temperature_2m",
+                "apparent_temperature",
+                "relative_humidity_2m",
+                "surface_pressure",
+                "wind_speed_10m",
+                "wind_direction_10m",
+                "uv_index",
+                "precipitation_probability",
+                "cloud_cover"
+            ],
+            "timezone": "auto"
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()["current"]
+
+        reading = WeatherReading(
+            recorded_at = datetime.utcnow(),
+            location    = f"{LAT},{LON}",
+            temperature = data.get("temperature_2m"),
+            feels_like  = data.get("apparent_temperature"),
+            humidity    = data.get("relative_humidity_2m"),
+            pressure    = data.get("surface_pressure"),
+            wind_speed  = data.get("wind_speed_10m"),
+            wind_dir    = data.get("wind_direction_10m"),
+            uv_index    = data.get("uv_index"),
+            precip_prob = data.get("precipitation_probability"),
+            cloud_cover = data.get("cloud_cover")
+        )
+
+        db = SessionLocal()
+        db.add(reading)
+        db.commit()
+        db.close()
+
+        check_alerts(reading)
+        print(f"[{datetime.utcnow()}] Reading stored: {data.get('temperature_2m')}°C")
+
+    except Exception as e:
+        print(f"Fetch error: {e}")
+
+def start_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(fetch_and_store, "interval", minutes=15)
+    scheduler.start()
+    fetch_and_store()
+    return scheduler
+
+
+----------------------------------------------------------------
+backend/alerts.py
+----------------------------------------------------------------
+from dataclasses import dataclass
+from typing import Optional
+
+THRESHOLDS = {
+    "temperature": 40.0,
+    "feels_like":  42.0,
+    "humidity":    90.0,
+    "wind_speed":  60.0,
+    "uv_index":     8.0,
+    "precip_prob": 80.0,
+    "aqi":        150.0,
+}
+
+@dataclass
+class Alert:
+    severity: str
+    parameter: str
+    value: float
+    message: str
+
+latest_alert: Optional[Alert] = None
+
+def check_alerts(reading) -> Optional[Alert]:
+    global latest_alert
+
+    if reading.temperature and reading.temperature >= THRESHOLDS["temperature"]:
+        latest_alert = Alert(
+            severity  = "Critical",
+            parameter = "temperature",
+            value     = reading.temperature,
+            message   = f"Extreme heat warning. Temperature at {reading.temperature}°C. Avoid outdoor exposure."
+        )
+        return latest_alert
+
+    if reading.feels_like and reading.feels_like >= THRESHOLDS["feels_like"]:
+        latest_alert = Alert(
+            severity  = "Critical",
+            parameter = "feels_like",
+            value     = reading.feels_like,
+            message   = f"Heat index at {reading.feels_like}°C. High risk of heat exhaustion. Stay indoors."
+        )
+        return latest_alert
+
+    if reading.uv_index and reading.uv_index >= THRESHOLDS["uv_index"]:
+        latest_alert = Alert(
+            severity  = "Warning",
+            parameter = "uv_index",
+            value     = reading.uv_index,
+            message   = f"UV index at {reading.uv_index}. Limit sun exposure. Use SPF 50+."
+        )
+        return latest_alert
+
+    if reading.precip_prob and reading.precip_prob >= THRESHOLDS["precip_prob"]:
+        latest_alert = Alert(
+            severity  = "Warning",
+            parameter = "precip_prob",
+            value     = reading.precip_prob,
+            message   = f"Rain probability at {reading.precip_prob}%. Carry an umbrella."
+        )
+        return latest_alert
+
+    if reading.wind_speed and reading.wind_speed >= THRESHOLDS["wind_speed"]:
+        latest_alert = Alert(
+            severity  = "Warning",
+            parameter = "wind_speed",
+            value     = reading.wind_speed,
+            message   = f"High winds at {reading.wind_speed} km/h. Avoid open areas."
+        )
+        return latest_alert
+
+    if reading.humidity and reading.humidity >= THRESHOLDS["humidity"]:
+        latest_alert = Alert(
+            severity  = "Caution",
+            parameter = "humidity",
+            value     = reading.humidity,
+            message   = f"Humidity at {reading.humidity}%. Heat feels more intense. Stay hydrated."
+        )
+        return latest_alert
+
+    if reading.aqi and reading.aqi >= THRESHOLDS["aqi"]:
+        latest_alert = Alert(
+            severity  = "Warning",
+            parameter = "aqi",
+            value     = reading.aqi,
+            message   = f"AQI at {reading.aqi}. Unhealthy air quality. Limit outdoor activity."
+        )
+        return latest_alert
+
+    latest_alert = None
+    return None
+
+def get_latest_alert() -> Optional[Alert]:
+    return latest_alert
+
+
+----------------------------------------------------------------
+backend/rag.py
+----------------------------------------------------------------
+import os
+import chromadb
+from langchain_community.llms import Ollama
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+OLLAMA_HOST  = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+CHROMA_PATH  = "./chroma_store"
+COLLECTION   = "climate_knowledge"
+
+sentence_ef = SentenceTransformerEmbeddingFunction(
+    model_name = "all-MiniLM-L6-v2"
+)
+
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+collection    = chroma_client.get_or_create_collection(
+    name               = COLLECTION,
+    embedding_function = sentence_ef
+)
+
+llm = Ollama(
+    model    = os.getenv("OLLAMA_MODEL", "llama3"),
+    base_url = OLLAMA_HOST
+)
+
+prompt_template = PromptTemplate(
+    input_variables=["conditions", "context"],
+    template="""
+You are a climate advisory assistant. Based on the current weather conditions and safety guidelines below, write a short plain-language advisory for the user.
+
+Current conditions:
+{conditions}
+
+Relevant safety guidelines:
+{context}
+
+Rules:
+- Keep it under 4 sentences
+- Start with a severity level: Informational, Caution, Warning, or Critical
+- Be direct, no fluff
+- Focus on what the user should actually do
+
+Advisory:
+"""
+)
+
+chain = LLMChain(llm=llm, prompt=prompt_template)
+
+
+def format_conditions(reading) -> str:
+    return f"""
+Temperature   : {reading.temperature}°C
+Feels like    : {reading.feels_like}°C
+Humidity      : {reading.humidity}%
+Wind speed    : {reading.wind_speed} km/h
+UV index      : {reading.uv_index}
+Rain prob     : {reading.precip_prob}%
+Cloud cover   : {reading.cloud_cover}%
+AQI           : {reading.aqi if reading.aqi else 'N/A'}
+""".strip()
+
+
+def retrieve_context(conditions_text: str) -> str:
+    results = collection.query(
+        query_texts = [conditions_text],
+        n_results   = 3
+    )
+    chunks = results["documents"][0]
+    return "\n\n".join(chunks)
+
+
+def generate_advisory(reading) -> dict:
+    conditions_text = format_conditions(reading)
+    context         = retrieve_context(conditions_text)
+
+    response = chain.invoke({
+        "conditions": conditions_text,
+        "context":    context
+    })
+
+    advisory_text = response["text"].strip()
+
+    if "Critical" in advisory_text:
+        severity = "Critical"
+    elif "Warning" in advisory_text:
+        severity = "Warning"
+    elif "Caution" in advisory_text:
+        severity = "Caution"
+    else:
+        severity = "Informational"
+
+    return {
+        "advisory": advisory_text,
+        "severity": severity,
+        "conditions": conditions_text
+    }
+
+
+def load_knowledge_base(folder: str = "./knowledge"):
+    import os
+    files = [f for f in os.listdir(folder) if f.endswith(".txt")]
+
+    for filename in files:
+        filepath = os.path.join(folder, filename)
+        with open(filepath, "r") as f:
+            text = f.read()
+
+        chunks = [text[i:i+500] for i in range(0, len(text), 500)]
+
+        collection.add(
+            documents = chunks,
+            ids       = [f"{filename}_{i}" for i in range(len(chunks))]
+        )
+        print(f"Loaded: {filename} ({len(chunks)} chunks)")
+
+
+----------------------------------------------------------------
+backend/main.py
+----------------------------------------------------------------
+import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from database import init_db, SessionLocal, WeatherReading
+from scheduler import start_scheduler
+from alerts import get_latest_alert
+from rag import generate_advisory, load_knowledge_base
+from datetime import datetime, timedelta
+from typing import List
+import asyncio
+
+connected_clients: List[WebSocket] = []
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    load_knowledge_base("./knowledge")
+    scheduler = start_scheduler()
+    yield
+    scheduler.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins     = ["*"],
+    allow_methods     = ["*"],
+    allow_headers     = ["*"],
+)
+
+
+@app.get("/conditions")
+def get_conditions():
+    db      = SessionLocal()
+    reading = db.query(WeatherReading)\
+                .order_by(WeatherReading.recorded_at.desc())\
+                .first()
+    db.close()
+
+    if not reading:
+        return {"error": "No data yet"}
+
+    return {
+        "recorded_at": reading.recorded_at,
+        "location":    reading.location,
+        "temperature": reading.temperature,
+        "feels_like":  reading.feels_like,
+        "humidity":    reading.humidity,
+        "pressure":    reading.pressure,
+        "wind_speed":  reading.wind_speed,
+        "wind_dir":    reading.wind_dir,
+        "uv_index":    reading.uv_index,
+        "precip_prob": reading.precip_prob,
+        "cloud_cover": reading.cloud_cover,
+        "aqi":         reading.aqi,
+    }
+
+
+@app.get("/history")
+def get_history():
+    db      = SessionLocal()
+    since   = datetime.utcnow() - timedelta(hours=24)
+    readings = db.query(WeatherReading)\
+                 .filter(WeatherReading.recorded_at >= since)\
+                 .order_by(WeatherReading.recorded_at.asc())\
+                 .all()
+    db.close()
+
+    return [
+        {
+            "recorded_at": r.recorded_at,
+            "temperature": r.temperature,
+            "humidity":    r.humidity,
+            "uv_index":    r.uv_index,
+            "precip_prob": r.precip_prob,
+        }
+        for r in readings
+    ]
+
+
+@app.post("/advisory")
+def get_advisory():
+    db      = SessionLocal()
+    reading = db.query(WeatherReading)\
+                .order_by(WeatherReading.recorded_at.desc())\
+                .first()
+    db.close()
+
+    if not reading:
+        return {"error": "No data yet"}
+
+    alert = get_latest_alert()
+    if alert and alert.severity == "Critical":
+        return {
+            "advisory": alert.message,
+            "severity": "Critical",
+            "source":   "alert_engine"
+        }
+
+    result = generate_advisory(reading)
+    result["source"] = "rag"
+    return result
+
+
+@app.get("/alert")
+def get_alert():
+    alert = get_latest_alert()
+    if not alert:
+        return {"alert": None}
+    return {
+        "severity":  alert.severity,
+        "parameter": alert.parameter,
+        "value":     alert.value,
+        "message":   alert.message
+    }
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    connected_clients.append(websocket)
+    try:
+        while True:
+            await asyncio.sleep(60)
+            conditions = get_conditions()
+            await websocket.send_json({"type": "conditions", "data": conditions})
+    except WebSocketDisconnect:
+        connected_clients.remove(websocket)
+
+
+----------------------------------------------------------------
+backend/knowledge/heat.txt
+----------------------------------------------------------------
+WHO Heat Stress Guidelines:
+- Heat index above 32°C: Caution. Fatigue possible with prolonged exposure.
+- Heat index above 41°C: Danger. Heat cramps and exhaustion likely.
+- Heat index above 54°C: Extreme Danger. Heat stroke highly likely.
+- Stay indoors during peak hours 11am to 4pm when heat index is above 40°C.
+- Drink at least 500ml of water per hour during extreme heat.
+- Elderly, children, and people with chronic illness are at highest risk.
+
+
+----------------------------------------------------------------
+backend/knowledge/aqi.txt
+----------------------------------------------------------------
+Air Quality Index Guidelines:
+- AQI 0-50: Good. No health risk.
+- AQI 51-100: Moderate. Unusually sensitive people should limit outdoor activity.
+- AQI 101-150: Unhealthy for sensitive groups. Reduce prolonged outdoor exertion.
+- AQI 151-200: Unhealthy. Everyone should limit outdoor activity.
+- AQI 201-300: Very Unhealthy. Avoid outdoor activity.
+- AQI 300+: Hazardous. Stay indoors, keep windows closed.
+
+
+----------------------------------------------------------------
+backend/knowledge/uv.txt
+----------------------------------------------------------------
+UV Index Safety Guidelines:
+- UV 0-2: Low. No protection needed.
+- UV 3-5: Moderate. Wear sunscreen SPF 30+.
+- UV 6-7: High. Sunscreen SPF 50+, wear a hat, seek shade midday.
+- UV 8-10: Very High. Minimize sun exposure between 10am and 4pm.
+- UV 11+: Extreme. Avoid sun exposure, stay indoors if possible.
+
+
+----------------------------------------------------------------
+backend/knowledge/rain.txt
+----------------------------------------------------------------
+Rain and Storm Guidelines:
+- Precipitation probability above 70%: Carry an umbrella, avoid open areas.
+- Heavy rainfall warning: Avoid low-lying areas and underpasses.
+- Thunderstorm risk: Stay indoors, avoid tall trees and metal structures.
+- Flooding risk increases when rainfall exceeds 50mm in 24 hours.
+
+
+----------------------------------------------------------------
+frontend/Dockerfile
+----------------------------------------------------------------
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json .
+RUN npm install
+COPY . .
+CMD ["npm", "start"]
+
+
+----------------------------------------------------------------
+frontend/tailwind.config.js
+----------------------------------------------------------------
+module.exports = {
+  content: ["./src/**/*.{js,jsx}"],
+  theme: { extend: {} },
+  plugins: [],
+}
+
+
+----------------------------------------------------------------
+frontend/postcss.config.js
+----------------------------------------------------------------
+module.exports = {
+  plugins: {
+    '@tailwindcss/postcss': {},
+  },
+}
+
+
+----------------------------------------------------------------
+frontend/src/index.css
+----------------------------------------------------------------
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+----------------------------------------------------------------
+frontend/src/api.js
+----------------------------------------------------------------
+import axios from "axios"
+
+const BASE = "http://localhost:8000"
+
+export const fetchConditions = () => axios.get(`${BASE}/conditions`)
+export const fetchHistory    = () => axios.get(`${BASE}/history`)
+export const fetchAdvisory   = () => axios.post(`${BASE}/advisory`)
+export const fetchAlert      = () => axios.get(`${BASE}/alert`)
+
+
+----------------------------------------------------------------
+frontend/src/components/ConditionCard.jsx
+----------------------------------------------------------------
+export default function ConditionCard({ label, value, unit }) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+      <span className="text-xs text-gray-400 uppercase tracking-wide">{label}</span>
+      <span className="text-2xl font-semibold text-gray-800">
+        {value ?? "—"}<span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>
+      </span>
+    </div>
+  )
+}
+
+
+----------------------------------------------------------------
+frontend/src/components/AdvisoryPanel.jsx
+----------------------------------------------------------------
+const SEVERITY_STYLES = {
+  Informational: "bg-green-50  border-green-400  text-green-800",
+  Caution:       "bg-yellow-50 border-yellow-400 text-yellow-800",
+  Warning:       "bg-orange-50 border-orange-400 text-orange-800",
+  Critical:      "bg-red-50    border-red-500    text-red-800",
+}
+
+const SEVERITY_BADGE = {
+  Informational: "bg-green-100  text-green-700",
+  Caution:       "bg-yellow-100 text-yellow-700",
+  Warning:       "bg-orange-100 text-orange-700",
+  Critical:      "bg-red-100    text-red-700",
+}
+
+export default function AdvisoryPanel({ advisory, severity }) {
+  if (!advisory) return null
+
+  const box   = SEVERITY_STYLES[severity] ?? SEVERITY_STYLES.Informational
+  const badge = SEVERITY_BADGE[severity]  ?? SEVERITY_BADGE.Informational
+
+  return (
+    <div className={`rounded-xl border-l-4 p-5 ${box}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge}`}>
+          {severity}
+        </span>
+        <span className="text-xs text-gray-400">Latest advisory</span>
+      </div>
+      <p className="text-sm leading-relaxed">{advisory}</p>
+    </div>
+  )
+}
+
+
+----------------------------------------------------------------
+frontend/src/components/HistoryChart.jsx
+----------------------------------------------------------------
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
+
+export default function HistoryChart({ data }) {
+  const formatted = data.map(d => ({
+    ...d,
+    time: new Date(d.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }))
+
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">24-hour trend</p>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={formatted}>
+          <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd"/>
+          <YAxis tick={{ fontSize: 11 }} width={30}/>
+          <Tooltip/>
+          <Legend/>
+          <Line type="monotone" dataKey="temperature" stroke="#E8593C" dot={false} name="Temp °C"/>
+          <Line type="monotone" dataKey="humidity"    stroke="#3B8BD4" dot={false} name="Humidity %"/>
+          <Line type="monotone" dataKey="uv_index"    stroke="#F2A623" dot={false} name="UV Index"/>
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+
+----------------------------------------------------------------
+frontend/src/App.jsx
+----------------------------------------------------------------
+import { useEffect, useState } from "react"
+import { fetchConditions, fetchHistory, fetchAdvisory } from "./api"
+import ConditionCard  from "./components/ConditionCard"
+import AdvisoryPanel  from "./components/AdvisoryPanel"
+import HistoryChart   from "./components/HistoryChart"
+
+export default function App() {
+  const [conditions, setConditions] = useState(null)
+  const [history,    setHistory]    = useState([])
+  const [advisory,   setAdvisory]   = useState(null)
+  const [severity,   setSeverity]   = useState("Informational")
+
+  const loadData = async () => {
+    const [cond, hist, adv] = await Promise.all([
+      fetchConditions(),
+      fetchHistory(),
+      fetchAdvisory(),
+    ])
+    setConditions(cond.data)
+    setHistory(hist.data)
+    setAdvisory(adv.data.advisory)
+    setSeverity(adv.data.severity)
+  }
+
+  useEffect(() => {
+    loadData()
+
+    const ws = new WebSocket("ws://localhost:8000/ws")
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data)
+      if (msg.type === "conditions") setConditions(msg.data)
+    }
+
+    const interval = setInterval(loadData, 15 * 60 * 1000)
+    return () => {
+      ws.close()
+      clearInterval(interval)
+    }
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto flex flex-col gap-6">
+
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-800">Climate Advisory</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {conditions?.recorded_at
+              ? `Last updated ${new Date(conditions.recorded_at).toLocaleTimeString()}`
+              : "Loading..."}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <ConditionCard label="Temperature" value={conditions?.temperature} unit="°C"/>
+          <ConditionCard label="Feels like"  value={conditions?.feels_like}  unit="°C"/>
+          <ConditionCard label="Humidity"    value={conditions?.humidity}    unit="%"/>
+          <ConditionCard label="Wind"        value={conditions?.wind_speed}  unit="km/h"/>
+          <ConditionCard label="UV Index"    value={conditions?.uv_index}    unit=""/>
+          <ConditionCard label="Rain"        value={conditions?.precip_prob} unit="%"/>
+          <ConditionCard label="Cloud Cover" value={conditions?.cloud_cover} unit="%"/>
+          <ConditionCard label="AQI"         value={conditions?.aqi}         unit=""/>
+        </div>
+
+        <AdvisoryPanel advisory={advisory} severity={severity}/>
+
+        <HistoryChart data={history}/>
+
+      </div>
+    </div>
+  )
+}
+
+
+----------------------------------------------------------------
+COMMANDS REFERENCE
+----------------------------------------------------------------
+
+Start only DB and Ollama (before backend is ready):
+  docker compose up -d db ollama
+
+Pull a model into Ollama:
+  ollama pull llama3
+  ollama pull mistral
+
+List downloaded models:
+  ollama list
+
+Run full stack:
+  docker compose up --build
+
+Rebuild only frontend:
+  docker compose up --build frontend
+
+Install frontend dependencies (outside Docker):
+  cd frontend
+  npm install axios recharts
+  npm install -D tailwindcss @tailwindcss/postcss
+
+URLs:
+  Dashboard  : http://localhost:3000
+  API        : http://localhost:8000
+  API docs   : http://localhost:8000/docs
+
+
+----------------------------------------------------------------
+TO SWAP THE AI MODEL
+----------------------------------------------------------------
+In .env:
+  OLLAMA_MODEL=mistral
+
+Or hardcode in backend/rag.py:
+  llm = Ollama(model="mistral", base_url=OLLAMA_HOST)
+
+Available models: llama3, mistral, gemma2, phi3
+
+
+----------------------------------------------------------------
+ALERT THRESHOLDS (backend/alerts.py)
+----------------------------------------------------------------
+Temperature  : 40.0 °C  → Critical
+Feels like   : 42.0 °C  → Critical
+UV index     : 8.0      → Warning
+Rain prob    : 80.0 %   → Warning
+Wind speed   : 60.0 km/h → Warning
+Humidity     : 90.0 %   → Caution
+AQI          : 150.0    → Warning
+
+
+----------------------------------------------------------------
+API ENDPOINTS
+----------------------------------------------------------------
+GET  /conditions  — latest weather reading from MySQL
+GET  /history     — last 24h readings for charts
+POST /advisory    — triggers RAG pipeline, returns advisory
+GET  /alert       — returns current alert engine status
+WS   /ws          — WebSocket for live dashboard updates
+
+================================================================
+END OF DOCUMENT
+================================================================
