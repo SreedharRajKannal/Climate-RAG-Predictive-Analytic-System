@@ -1,0 +1,18 @@
+CC-DOC-003: Severe Convective Weather and Windstorm Safety
+Target Metadata: category: convective_weather, variable: wind_speed, variable: wind_direction
+
+Risk Threshold Matrix:
+* Level 1 (Informational): Sustained wind speeds < 30 km/h. Nominal operational baseline.
+* Level 2 (Caution): Sustained wind speeds 30 to 50 km/h or gusts up to 60 km/h. Minor movement of unanchored structural items. Difficulty operating lightweight vehicles.
+* Level 3 (Warning): Sustained wind speeds 50 to 70 km/h or convective gusts up to 85 km/h. Structural damage to temporary frameworks, downing of minor tree limbs, and significant aerodynamic loading on tall profiles.
+* Level 4 (Critical): Wind velocities exceeding 70 km/h sustained or gusts > 85 km/h. Widespread structural damage, failure of structural masonry, extensive uprooting of mature green cover, and destruction of overhead electrical infrastructure.
+
+Aerodynamic Projectile Mechanics:
+* Kinetic Transformations: High-velocity wind fields turn loose outdoor materials (planters, patio furniture, unsecured construction sheet-metal, and tools) into dangerous projectiles. All unanchored assets must be mechanically tethered or moved inside structural envelopes upon receiving Level 2 or higher alerts.
+
+Structural Engineering Vulnerabilities:
+* Splay and Flexing Risks: Avoid proximity to unbricked hoardings, large commercial billboards, and compromised overhead spans. These structures experience high wind shear stresses that can lead to sudden structural fatigue and failure.
+* Green Cover Hazards: Mature trees, particularly those with shallow root structures or dense canopies, present high uprooting and branch-cleavage risks. Vehicles should never be parked beneath tree lines during warning windows.
+
+Infrastructure Resilience Protocols:
+* Energy Autonomy: Keep auxiliary power systems, tactical emergency lights, and high-capacity portable power banks fully charged.

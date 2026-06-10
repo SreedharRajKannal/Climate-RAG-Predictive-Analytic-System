@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+
+  db:
+    image: mysql:8
+    container_name: climate_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: climate_db
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama
+    container_name: climate_ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  api:
+    build: ./backend
+    container_name: climate_api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      DB_URL: mysql+mysqlconnector://${DB_USER}:${DB_PASSWORD}@db/climate_db
+      OLLAMA_HOST: http://ollama:11434
+      LOCATION_LAT: ${LOCATION_LAT}
+      LOCATION_LON: ${LOCATION_LON}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: climate_frontend
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  mysql_data:
+  ollama_data:

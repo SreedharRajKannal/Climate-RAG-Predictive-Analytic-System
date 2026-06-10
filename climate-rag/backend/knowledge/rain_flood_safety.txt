@@ -1,0 +1,16 @@
+CC-DOC-002: Hydrological Risk and Flood Mitigation
+Target Metadata: category: hydrology, variable: precipitation_probability, variable: rain_amount
+
+Risk Threshold Matrix:
+* Level 1 (Informational): Precipitation probability < 40% or accumulation forecast < 5 mm/hr. Low localized disruption.
+* Level 2 (Caution): Precipitation probability 40% to 79% or accumulation forecast 5 to 15 mm/hr. Impaired transit visibility, slick surfaces, and minor pooling on roadways.
+* Level 3 (Warning): Precipitation probability >= 80% or accumulation forecast 15 to 30 mm/hr. Rapid stormwater system saturation. Widespread street flooding and significant transit delays.
+* Level 4 (Critical): Torrential cloudbursts with accumulation > 30 mm/hr or sustained precipitation causing rapid inundation. Flash flooding, structural threat, and isolation of low-lying urban nodes.
+
+Hydro-Dynamic Principles & Transport Safety:
+* Kinetic Displacement: Moving floodwater possesses immense kinetic energy. A depth of merely 6 inches (15 cm) of fast-moving water is sufficient to sweep an adult off their feet by disrupting their center of gravity.
+* Vehicular Buoyancy: A water depth of 12 inches (30 cm) can float or displace small to mid-sized passenger vehicles, causing a complete loss of traction and steering control. Avoid driving through flooded underpasses or unmeasured standing water. "Turn around, don't drown."
+
+Asset and Structural Protection:
+* Galvanic & Electrical Isolation: In the event of indoor water ingress, immediate isolation of the building's mains power distribution panel is mandatory. Unplug all localized appliances to mitigate electrical arcing, short circuits, and severe electrocution hazards.
+* Document Preservation: Vital physical documentation, corporate records, and sensitive electronic mediums must be sealed within certified waterproof bags and physically relocated to vertical architectural levels above the projected flood line.

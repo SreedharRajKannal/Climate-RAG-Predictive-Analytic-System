@@ -1,0 +1,15 @@
+CC-DOC-005: Ambient Air Quality and Atmospheric Pollution Mitigations
+Target Metadata: category: atmospheric_chemistry, variable: aqi, variable: pm25
+
+Risk Threshold Matrix:
+* Level 1 (Informational): Air Quality Index (AQI) 0–50 (Good). No mitigation needed.
+* Level 2 (Caution): AQI 51–100 (Satisfactory) or 101–200 (Moderate). Mild respiratory discomfort may occur in highly sensitive individuals or those with pre-existing pulmonary conditions.
+* Level 3 (Warning): AQI 201–300 (Poor) or 301–400 (Very Poor). Widespread respiratory irritation. Increased symptoms in individuals with asthma, COPD, or cardiovascular disease. Outdoor physical activities should be restricted.
+* Level 4 (Critical): AQI > 400 (Severe). Severe respiratory strain across the entire population. High risk of cardiovascular events and acute pulmonary distress. Complete cessation of outdoor activity is advised.
+
+Particulate Matter Dynamics (PM2.5):
+* Deep Alveolar Penetration: Particulate matter with aerodynamic diameters < 2.5 µm (PM2.5) can bypass typical upper respiratory filtration systems. These ultra-fine particles travel deep into the lungs' alveoli, crossing directly into the bloodstream and inducing systemic inflammation.
+
+Mechanical Filtration & Building Management:
+* Personal Filtration Limits: Standard cloth or surgical masks are ineffective against PM2.5 because their pore sizes allow microscopic particulates to pass through. When AQI levels reach Level 3 or 4, individuals must use certified N95, N99, or FFP2 particulate respirators, which feature electrostatically charged fibers to trap fine particles.
+* HVAC Containment: During poor air quality events, close all external windows and doors. Set HVAC systems to internal recirculation mode to prevent drawing in outdoor particulate matter. Run indoor air purifiers with High-Efficiency Particulate Air (HEPA) filters sized to match the room's Clean Air Delivery Rate (CADR).

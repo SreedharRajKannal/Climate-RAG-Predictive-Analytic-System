@@ -1,0 +1,17 @@
+CC-DOC-001: Thermal Stress and Heat Safety Protocols
+Target Metadata: category: thermal_stress, variable: temperature, variable: apparent_temperature
+
+Risk Threshold Matrix:
+* Level 1 (Informational): Ambient Temperature < 30°C or Apparent Temperature < 32°C. Minimal physiological risk. Nominal outdoor conditions.
+* Level 2 (Caution): Ambient Temperature 30°C to 35°C or Apparent Temperature 32°C to 39°C. Heightened discomfort. Risk of fatigue during prolonged physical exertion.
+* Level 3 (Warning): Ambient Temperature 35°C to 40°C or Apparent Temperature 39°C to 45°C. Significant risk of heat cramps and heat exhaustion. Outdoor operational limits recommended.
+* Level 4 (Critical): Ambient Temperature > 40°C or Apparent Temperature > 45°C. Imminent risk of heat stroke. Absolute cessation of non-essential outdoor activity.
+
+Physiological Impact & Clinical Presentation:
+* Heat Exhaustion: Characterized by heavy diaphoresis (sweating), rapid/weak pulse, orthostatic dizziness, nausea, headache, and a normal to slightly elevated core body temperature.
+* Heat Stroke: A life-threatening medical emergency marked by hyperthermia (core body temperature > 40°C), anhidrosis (absence of sweating), neurological dysfunction (confusion, delirium, ataxia, or loss of consciousness), and a rapid, bounding pulse.
+
+Operational Directives:
+* Diurnal Avoidance Window: Restrict all non-essential outdoor exposure, heavy labor, and physical training during peak solar irradiance intervals, specifically between 11:00 AM and 3:00 PM.
+* Hydration Volumetrics: For active exposure in Level 2/3 conditions, individuals must consume 200–250 mL of water or electrolyte-stabilized fluids every 20 minutes. Total fluid intake should approximate 1 Liter per hour of active exposure to counteract metabolic fluid loss.
+* Barrier Protections: Utilization of wide-brimmed headwear, loose-fitting, high-albedo (light-colored), and highly breathable textiles to maximize evaporative cooling.

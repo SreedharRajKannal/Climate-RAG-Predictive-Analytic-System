@@ -1,0 +1,17 @@
+CC-DOC-004: Solar Ultraviolet (UV) Radiation Protection Framework
+Target Metadata: category: actinic_radiation, variable: uv_index
+
+Risk Threshold Matrix:
+* Level 1 (Informational): UV Index 0–2 (Low). Safe for standard, unprotected outdoor exposure.
+* Level 2 (Caution): UV Index 3–5 (Moderate). Mild erythema (sunburn) risk. Protection recommended for extended midday exposure.
+* Level 3 (Warning): UV Index 6–7 (High) and 8–10 (Very High). Accelerated cell damage. Erythema can manifest within 15–20 minutes of unprotected exposure.
+* Level 4 (Critical): UV Index >= 11 (Extreme). Extreme risk of acute tissue damage. Erythema can occur in under 10 minutes. Limit outdoor exposure between 10:00 AM and 4:00 PM.
+
+Ocular and Dermatological Pathophysiology:
+* Actinic Degradation: Ultraviolet radiation (specifically UVA and UVB bands) damages cellular DNA, accelerates skin aging, and increases long-term skin cancer risks.
+* Photokeratitis: Unprotected ocular exposure to high UV bands can induce acute photokeratitis (corneal sunburn), causing intense pain, tearing, and temporary vision loss.
+
+Prophylactic Interventions:
+* Chemical Filtration: Apply broad-spectrum sunscreen with a Sun Protection Factor (SPF) rating of >= 30 to all exposed dermis 20 minutes before outdoor exposure. Reapplication is required every 2 hours, or more frequently if sweating or swimming.
+* Ocular Shields: Wear sunglasses with verified UV400 ratings that block 99% to 100% of UVA and UVB rays.
+* Demographic Vulnerability: Infants, young children, and elderly individuals have lower cellular repair capacities and thinner dermal layers, requiring strict protection during Level 3 and 4 windows.
