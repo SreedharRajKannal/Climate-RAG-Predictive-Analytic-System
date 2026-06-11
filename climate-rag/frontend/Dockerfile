@@ -1,6 +1,8 @@
-FROM node:18-alpine
+FROM node:16-alpine
 WORKDIR /app
 COPY package*.json .
+RUN npm config set strict-ssl false
+RUN npm config set registry http://registry.npmjs.org/
 RUN npm install
 COPY . .
 CMD ["npm", "start"]
