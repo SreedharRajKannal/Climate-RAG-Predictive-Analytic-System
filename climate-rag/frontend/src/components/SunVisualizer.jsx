@@ -84,7 +84,8 @@ export default function SunVisualizer({ sunrise, sunset }) {
               <stop offset="100%" stopColor="#818cf8" />
             </linearGradient>
           </defs>
-          <style dangerouslySetInnerHTML={{ __html: `
+          <style dangerouslySetInnerHTML={{
+            __html: `
             @keyframes pulse-glow {
               0%, 100% { filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.6)); }
               50% { filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.9)); }
@@ -142,9 +143,7 @@ export default function SunVisualizer({ sunrise, sunset }) {
           <text x="180" y="103" textAnchor="middle" fill="#64748b" fontSize="8" fontWeight="500">
             {formatTimeStr(sunset)}
           </text>
-          <text x="100" y="107" textAnchor="middle" fill="#475569" fontSize="7" letterSpacing="0.5">
-            Dynamically moving sun with time
-          </text>
+
         </svg>
 
         {/* Legend */}

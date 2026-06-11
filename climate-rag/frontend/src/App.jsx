@@ -245,7 +245,7 @@ export default function App() {
         {/* MAIN BODY GRID - 40% Left, 60% Right on Desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           
-          {/* LEFT COLUMN: Current Weather & Key Metric Tiles (40% width -> 2/5 columns) */}
+          {/* LEFT COLUMN: Current Weather + Key Metrics + Sun Visualizer (40% width -> 2/5 columns) */}
           <section className="lg:col-span-2 flex flex-col gap-5">
             {/* Primary Weather Card */}
             <div className="bg-gradient-to-br from-indigo-950/20 to-slate-900/40 border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col items-center">
@@ -283,32 +283,30 @@ export default function App() {
               <ConditionCard label="Cloud Cover" value={conditions?.cloud_cover} unit="%" />
               <ConditionCard label="Pressure" value={conditions?.pressure} unit="hPa" />
             </div>
+
+            {/* Sun Cycle Visualizer — part of left section */}
+            <SunVisualizer sunrise={conditions?.sunrise} sunset={conditions?.sunset} />
           </section>
 
-          {/* RIGHT COLUMN: AI Advisory Panel + Graphs Section (60% width -> 3/5 columns) */}
+          {/* RIGHT COLUMN: AI Advisory Panel (60% width -> 3/5 columns) */}
           <section className="lg:col-span-3 flex flex-col gap-6">
             
             {/* AI Advisory Panel (Top of Right Column) */}
             <AdvisoryPanel advisory={advisory} severity={severity} source={source} />
             
-            {/* Graphs Section (Below advisory) */}
-            <div className="flex flex-col gap-6">
-              
-              {/* Sun Cycle Visualizer */}
-              <SunVisualizer sunrise={conditions?.sunrise} sunset={conditions?.sunset} />
-              
-              {/* Comparison Graph */}
-              <ComparisonChart data={comparison} />
+            {/* Comparison Graph — "Previous Prediction vs Current" */}
+            <ComparisonChart data={comparison} />
 
-              {/* Advanced Graphs: Side-by-side or stacked on layout size */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <TrendChart data={history} />
-                <FuturePredictionChart data={forecast} />
-              </div>
-
-            </div>
           </section>
         </div>
+
+        {/* BOTTOM SECTION: History & Trend Graphs — Full Width */}
+        <section className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TrendChart data={history} />
+            <FuturePredictionChart data={forecast} />
+          </div>
+        </section>
 
       </div>
     </div>

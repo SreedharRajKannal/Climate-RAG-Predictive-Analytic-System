@@ -4,6 +4,10 @@ from datetime import datetime
 import os
 
 DATABASE_URL = os.getenv("DB_URL")
+if not DATABASE_URL:
+    # Fallback to a local SQLite database for development outside Docker
+    _db_path = os.path.join(os.path.dirname(__file__), "climate.db")
+    DATABASE_URL = f"sqlite:///{_db_path}"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
