@@ -21,13 +21,16 @@ export const fetchAlert = (lat, lon) =>
 export const fetchForecast = (lat, lon) => 
   axios.get(`${BASE}/forecast`, { params: lat !== undefined && lon !== undefined ? { lat, lon } : {} })
 
-export const fetchComparison = (lat, lon) => 
-  axios.get(`${BASE}/comparison`, { params: lat !== undefined && lon !== undefined ? { lat, lon } : {} })
+export const fetchAirQuality = (lat, lon) => 
+  axios.get(`${BASE}/air-quality`, { params: lat !== undefined && lon !== undefined ? { lat, lon } : {} })
 
-export const updateLocation  = (lat, lon, name) => axios.post(`${BASE}/location?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`)
+export const fetchDailyForecast = (lat, lon) => 
+  axios.get(`${BASE}/daily-forecast`, { params: lat !== undefined && lon !== undefined ? { lat, lon } : {} })
+
+export const updateLocation = (lat, lon, name) => axios.post(`${BASE}/location?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`)
 
 export const fetchOpenMeteoHistory = (lat, lon) => 
   axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,uv_index&timezone=auto&past_days=1&forecast_days=0`)
 
 export const fetchOpenMeteoForecast = (lat, lon) => 
-  axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=2`)
+  axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,weather_code,apparent_temperature&timezone=auto&forecast_days=2`)

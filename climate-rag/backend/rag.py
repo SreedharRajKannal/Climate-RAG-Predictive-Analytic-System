@@ -60,18 +60,30 @@ AQI           : {reading.aqi if reading.aqi else 'N/A'}
 """.strip()
 
 
-def retrieve_context(conditions_text: str) -> str:
+def retrieve_context(conditions_text: str) -> tuple:
     results = collection.query(
         query_texts = [conditions_text],
         n_results   = 3
     )
     chunks = results["documents"][0]
-    return "\n\n".join(chunks)
+    ids = results["ids"][0]
+    
+    retrieved_chunks = []
+    for doc_id, chunk in zip(ids, chunks):
+        # IDs are stored as "{filename}_{index}", so rsplit extracts filename
+        source_file = doc_id.rsplit('_', 1)[0]
+        excerpt = chunk[:80].replace("\n", " ") + "..."
+        retrieved_chunks.append({
+            "source": source_file,
+            "excerpt": excerpt
+        })
+        
+    return "\n\n".join(chunks), retrieved_chunks
 
 
 def generate_advisory(reading) -> dict:
     conditions_text = format_conditions(reading)
-    context         = retrieve_context(conditions_text)
+    context, retrieved_chunks = retrieve_context(conditions_text)
 
     try:
         response = chain.invoke({
@@ -107,7 +119,8 @@ def generate_advisory(reading) -> dict:
     return {
         "advisory": advisory_text,
         "severity": severity,
-        "conditions": conditions_text
+        "conditions": conditions_text,
+        "retrieved_chunks": retrieved_chunks
     }
 
 

@@ -8,6 +8,7 @@ import {
   fetchOpenMeteoForecast
 } from "./api"
 import ConditionCard from "./components/ConditionCard"
+import ThermalStressCard from "./components/ThermalStressCard"
 import AdvisoryPanel from "./components/AdvisoryPanel"
 import TrendChart from "./components/TrendChart"
 import ComparisonChart from "./components/ComparisonChart"
@@ -24,6 +25,7 @@ export default function App() {
   const [advisory, setAdvisory] = useState(null)
   const [severity, setSeverity] = useState("Informational")
   const [source, setSource] = useState("rag")
+  const [retrievedChunks, setRetrievedChunks] = useState([])
   const [timezoneAbbr, setTimezoneAbbr] = useState("")
   const [utcOffsetSeconds, setUtcOffsetSeconds] = useState(0)
 
@@ -101,6 +103,7 @@ export default function App() {
       setAdvisory(adv.data.advisory)
       setSeverity(adv.data.severity)
       setSource(adv.data.source)
+      setRetrievedChunks(adv.data.retrieved_chunks || [])
       
       if (!comp.data.error) setComparison(comp.data.error ? [] : comp.data)
     } catch (e) {
@@ -196,8 +199,31 @@ export default function App() {
     }
   }
 
+  const GlobalBanner = () => {
+    if (!severity || severity === "Informational") return null
+    
+    let bannerColor = ""
+    let isCritical = severity === "Critical"
+    
+    if (severity === "Caution") bannerColor = "bg-yellow-500/20 text-yellow-300 border-yellow-500/50"
+    else if (severity === "Warning") bannerColor = "bg-orange-500/20 text-orange-300 border-orange-500/50"
+    else if (severity === "Critical") bannerColor = "bg-red-500/20 text-red-200 border-red-500/50"
+    
+    return (
+      <div className={`w-full border rounded-xl px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg ${bannerColor} ${isCritical ? "animate-pulse" : ""}`}>
+        <div className="flex items-center gap-3">
+          <span className="font-bold tracking-widest uppercase text-xs">⚠ {severity}</span>
+          <span className="text-sm font-medium line-clamp-1">— {advisory}</span>
+        </div>
+        <div className="text-[10px] font-bold uppercase tracking-wider opacity-80 whitespace-nowrap">
+          Source: {source === "rag" ? "RAG · Llama3" : "Rule Engine"}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-[#0f1117] text-slate-100 p-4 md:p-6 lg:p-8 font-sans">
+    <div className={`min-h-screen bg-[#0f1117] text-slate-100 p-4 md:p-6 lg:p-8 font-sans theme-${severity.toLowerCase()}`}>
       <div className="max-w-7xl mx-auto flex flex-col gap-6">
         
         {/* HEADER BAR */}
@@ -299,6 +325,8 @@ export default function App() {
           </div>
         </header>
 
+        <GlobalBanner />
+
         {/* MAIN BODY GRID - 40% Left, 60% Right on Desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           
@@ -329,10 +357,11 @@ export default function App() {
               </div>
             </div>
 
+            <ThermalStressCard apparentTemperature={conditions?.feels_like} temperature={conditions?.temperature} />
+
             {/* Weather Metrics Grid - 2x3 Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ConditionCard label="AQI" value={conditions?.aqi} unit="" />
-              <ConditionCard label="Feels like" value={conditions?.feels_like} unit="°C" />
               <ConditionCard label="Humidity" value={conditions?.humidity} unit="%" />
               <ConditionCard label="Wind" value={conditions?.wind_speed} unit="km/h" />
               <ConditionCard label="UV Index" value={conditions?.uv_index} unit="" />
@@ -340,21 +369,13 @@ export default function App() {
               <ConditionCard label="Cloud Cover" value={conditions?.cloud_cover} unit="%" />
               <ConditionCard label="Pressure" value={conditions?.pressure} unit="hPa" />
             </div>
-
-            {/* Sun Cycle Visualizer — part of left section */}
-            <SunVisualizer 
-              sunrise={conditions?.sunrise} 
-              sunset={conditions?.sunset} 
-              sunriseTomorrow={conditions?.sunrise_tomorrow}
-              utcOffsetSeconds={utcOffsetSeconds} 
-            />
           </section>
 
           {/* RIGHT COLUMN: AI Advisory Panel (60% width -> 3/5 columns) */}
           <section className="lg:col-span-3 flex flex-col gap-6">
             
             {/* AI Advisory Panel (Top of Right Column) */}
-            <AdvisoryPanel advisory={advisory} severity={severity} source={source} />
+            <AdvisoryPanel advisory={advisory} severity={severity} source={source} retrievedChunks={retrievedChunks} />
             
             {/* Comparison Graph — "Previous Prediction vs Current" */}
             <ComparisonChart data={comparison} timezoneAbbr={timezoneAbbr} />
@@ -367,6 +388,15 @@ export default function App() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <TrendChart data={history} timezoneAbbr={timezoneAbbr} />
             <FuturePredictionChart data={forecast} timezoneAbbr={timezoneAbbr} />
+          </div>
+          
+          <div className="w-full xl:w-1/2 mx-auto pt-2">
+            <SunVisualizer 
+              sunrise={conditions?.sunrise} 
+              sunset={conditions?.sunset} 
+              sunriseTomorrow={conditions?.sunrise_tomorrow}
+              utcOffsetSeconds={utcOffsetSeconds} 
+            />
           </div>
         </section>
 

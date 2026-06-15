@@ -8,7 +8,7 @@ import json
 import os
 import time
 import hashlib
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 import requests
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", ".cache")
@@ -33,11 +33,11 @@ def _save_cache(cache: Dict[str, Any]) -> None:
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f)
 
-def _make_cache_key(lat: float, lon: float) -> str:
+def _make_cache_key(lat: float, lon: float, prefix: str = "") -> str:
     """Create a deterministic key for a location.
     Rounds latitude/longitude to 4 decimal places and hashes the string.
     """
-    key_str = f"{lat:.4f}:{lon:.4f}"
+    key_str = f"{prefix}:{lat:.4f}:{lon:.4f}"
     return hashlib.sha256(key_str.encode()).hexdigest()
 
 def _is_fresh(entry: Dict[str, Any]) -> bool:
@@ -47,7 +47,7 @@ def _is_fresh(entry: Dict[str, Any]) -> bool:
 
 def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
     """Perform the actual HTTP request to Open-Meteo with retry/back‑off.
-    Retrieves current weather, hourly forecasts (next 48 h) and daily sunrise / sunset.
+    Retrieves current weather, hourly forecasts and daily data for 7 days.
     """
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
@@ -63,18 +63,31 @@ def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
             "uv_index",
             "precipitation_probability",
             "cloud_cover",
+            "visibility",
+            "dew_point_2m",
+            "weather_code",
         ],
         "hourly": [
             "temperature_2m",
             "relative_humidity_2m",
             "precipitation_probability",
             "wind_speed_10m",
+            "wind_direction_10m",
             "uv_index",
+            "weather_code",
+            "apparent_temperature",
         ],
-        "daily": ["sunrise", "sunset"],
+        "daily": [
+            "sunrise",
+            "sunset",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "weather_code",
+            "precipitation_probability_max",
+        ],
         "timezone": "auto",
         "past_days": 1,
-        "forecast_days": 2,
+        "forecast_days": 7,
     }
     attempt = 0
     while attempt < MAX_RETRIES:
@@ -97,7 +110,7 @@ def get_weather_data(lat: float, lon: float) -> Dict[str, Any]:
     result.
     """
     cache = _load_cache()
-    key = _make_cache_key(lat, lon)
+    key = _make_cache_key(lat, lon, "weather")
     entry = cache.get(key)
     if entry and _is_fresh(entry):
         return entry["data"]
@@ -148,3 +161,82 @@ def get_location_metadata(lat: float, lon: float) -> Tuple[str, str, str, str, i
 def get_hourly_forecast(lat: float, lon: float) -> Dict[str, Any]:
     payload = get_weather_data(lat, lon)
     return payload.get("hourly", {})
+
+# Daily forecast for the 7-day view.
+def get_daily_forecast(lat: float, lon: float) -> List[Dict[str, Any]]:
+    """Return 7-day daily forecast data."""
+    payload = get_weather_data(lat, lon)
+    daily = payload.get("daily", {})
+    
+    dates = daily.get("time", [])
+    highs = daily.get("temperature_2m_max", [])
+    lows = daily.get("temperature_2m_min", [])
+    codes = daily.get("weather_code", [])
+    precips = daily.get("precipitation_probability_max", [])
+    
+    result = []
+    for i in range(len(dates)):
+        # Skip the first entry (yesterday, due to past_days=1)
+        if i == 0:
+            continue
+        result.append({
+            "date": dates[i],
+            "temp_max": highs[i] if i < len(highs) else None,
+            "temp_min": lows[i] if i < len(lows) else None,
+            "weather_code": codes[i] if i < len(codes) else 0,
+            "precip_prob_max": precips[i] if i < len(precips) else 0,
+        })
+    
+    return result
+
+# Air quality endpoint.
+def get_air_quality(lat: float, lon: float) -> Dict[str, Any]:
+    """Fetch air quality data from the Open-Meteo Air Quality API."""
+    cache = _load_cache()
+    key = _make_cache_key(lat, lon, "aqi")
+    entry = cache.get(key)
+    if entry and _is_fresh(entry):
+        return entry["data"]
+    
+    url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    params = {
+        "latitude": f"{lat:.4f}",
+        "longitude": f"{lon:.4f}",
+        "current": [
+            "european_aqi",
+            "pm2_5",
+            "pm10",
+            "carbon_monoxide",
+            "nitrogen_dioxide",
+            "ozone",
+        ],
+    }
+    
+    attempt = 0
+    while attempt < MAX_RETRIES:
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            current = data.get("current", {})
+            
+            result = {
+                "european_aqi": current.get("european_aqi"),
+                "pm2_5": current.get("pm2_5"),
+                "pm10": current.get("pm10"),
+                "co": current.get("carbon_monoxide"),
+                "no2": current.get("nitrogen_dioxide"),
+                "o3": current.get("ozone"),
+            }
+            
+            cache[key] = {"timestamp": time.time(), "data": result}
+            _save_cache(cache)
+            return result
+        except Exception as e:
+            attempt += 1
+            if attempt >= MAX_RETRIES:
+                if entry:
+                    return entry["data"]
+                return {"european_aqi": None, "pm2_5": None, "pm10": None, "co": None, "no2": None, "o3": None}
+            backoff = BACKOFF_FACTOR * (2 ** (attempt - 1))
+            time.sleep(backoff)

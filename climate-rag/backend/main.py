@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import List
 import asyncio
 import requests
-from openmeteo_client import get_location_metadata, get_hourly_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast
 
 connected_clients: List[WebSocket] = []
 
@@ -37,7 +37,7 @@ app.add_middleware(
 # ── REST ENDPOINTS ────────────────────────────────────────
 
 import requests
-from openmeteo_client import get_location_metadata, get_hourly_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast
 
 def get_readings_by_location(db, lat: float, lon: float, limit: int = None, since = None):
     query = db.query(WeatherReading)
@@ -85,6 +85,12 @@ def get_conditions(lat: float = None, lon: float = None):
     sunrise_tomorrow = None
     tz_abbr = "UTC"
     utc_offset = 0
+    daily_high = None
+    daily_low = None
+    visibility = None
+    dew_point = None
+    weather_code = 0
+    
     try:
         active_lat, active_lon = None, None
         if lat is not None and lon is not None:
@@ -99,6 +105,22 @@ def get_conditions(lat: float = None, lon: float = None):
             
         if active_lat and active_lon:
             sunrise, sunset, sunrise_tomorrow, tz_abbr, utc_offset = get_location_metadata(float(active_lat), float(active_lon))
+            
+            # Get additional data from the raw payload
+            from openmeteo_client import get_weather_data
+            payload = get_weather_data(float(active_lat), float(active_lon))
+            current = payload.get("current", {})
+            daily = payload.get("daily", {})
+            
+            visibility = current.get("visibility")
+            dew_point = current.get("dew_point_2m")
+            weather_code = current.get("weather_code", 0)
+            
+            # daily[1] = today (past_days=1 shifts index)
+            highs = daily.get("temperature_2m_max", [])
+            lows = daily.get("temperature_2m_min", [])
+            daily_high = highs[1] if len(highs) > 1 else None
+            daily_low = lows[1] if len(lows) > 1 else None
     except Exception as e:
         print(f"Error fetching metadata: {e}")
 
@@ -119,7 +141,12 @@ def get_conditions(lat: float = None, lon: float = None):
         "sunset":      sunset,
         "sunrise_tomorrow": sunrise_tomorrow,
         "timezone_abbreviation": tz_abbr,
-        "utc_offset_seconds": utc_offset
+        "utc_offset_seconds": utc_offset,
+        "daily_high":  daily_high,
+        "daily_low":   daily_low,
+        "visibility":  visibility,
+        "dew_point":   dew_point,
+        "weather_code": weather_code,
     }
 
 
@@ -163,69 +190,26 @@ def get_forecast(lat: float = None, lon: float = None):
         return {"error": f"Failed to fetch forecast: {e}"}
 
 
-@app.get("/comparison")
-def get_comparison(lat: float = None, lon: float = None):
+@app.get("/air-quality")
+def get_air_quality_endpoint(lat: float = None, lon: float = None):
     import scheduler
     latitude = lat if lat is not None else float(scheduler.LAT)
     longitude = lon if lon is not None else float(scheduler.LON)
-    
-    db = SessionLocal()
-    since = datetime.utcnow() - timedelta(hours=24)
-    if lat is not None and lon is not None:
-        readings = get_readings_by_location(db, lat, lon, since=since)
-        readings.reverse()
-    else:
-        readings = db.query(WeatherReading)\
-                     .filter(WeatherReading.recorded_at >= since)\
-                     .order_by(WeatherReading.recorded_at.asc())\
-                     .all()
-    db.close()
-
     try:
-        hourly = get_hourly_forecast(latitude, longitude)
-        
-        times = hourly.get("time", [])
-        temps = hourly.get("temperature_2m", [])
-        humidities = hourly.get("relative_humidity_2m", [])
-        precips = hourly.get("precipitation_probability", [])
-        winds = hourly.get("wind_speed_10m", [])
-        
-        comparison_data = []
-        now = datetime.utcnow()
-        # Find exactly the last 24 hours in the Open-Meteo hourly array
-        for idx, t_str in enumerate(times):
-            t_val = datetime.fromisoformat(t_str).replace(tzinfo=None)
-            diff = (now - t_val).total_seconds()
-            
-            # If within last 24h
-            if 0 <= diff <= 24 * 3600:
-                # Find the closest DB reading
-                closest_reading = None
-                min_diff = timedelta(hours=1)
-                
-                for r in readings:
-                    r_diff = abs(r.recorded_at - t_val)
-                    if r_diff < min_diff:
-                        min_diff = r_diff
-                        closest_reading = r
-                
-                if closest_reading:
-                    comparison_data.append({
-                        "recorded_at": t_str,
-                        "temp_current": closest_reading.temperature,
-                        "temp_predicted": temps[idx],
-                        "humidity_current": closest_reading.humidity,
-                        "humidity_predicted": humidities[idx],
-                        "rain_current": closest_reading.precip_prob,
-                        "rain_predicted": precips[idx],
-                        "wind_current": closest_reading.wind_speed,
-                        "wind_predicted": winds[idx]
-                    })
-        
-        return comparison_data
+        return get_air_quality(latitude, longitude)
     except Exception as e:
-        print(f"Error fetching comparison forecast: {e}")
-        return []
+        return {"error": f"Failed to fetch air quality: {e}"}
+
+
+@app.get("/daily-forecast")
+def get_daily_forecast_endpoint(lat: float = None, lon: float = None):
+    import scheduler
+    latitude = lat if lat is not None else float(scheduler.LAT)
+    longitude = lon if lon is not None else float(scheduler.LON)
+    try:
+        return get_daily_forecast(latitude, longitude)
+    except Exception as e:
+        return {"error": f"Failed to fetch daily forecast: {e}"}
 
 
 @app.get("/history")
@@ -274,7 +258,8 @@ def get_advisory(lat: float = None, lon: float = None):
         return {
             "advisory": alert.message,
             "severity": "Critical",
-            "source":   "alert_engine"
+            "source":   "alert_engine",
+            "retrieved_chunks": []
         }
 
     result = generate_advisory(reading)
