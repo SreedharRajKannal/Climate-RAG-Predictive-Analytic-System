@@ -36,7 +36,7 @@ const METRIC_CONFIGS = {
   }
 }
 
-export default function ComparisonChart({ data }) {
+export default function ComparisonChart({ data, timezoneAbbr }) {
   const [activeMetrics, setActiveMetrics] = useState({
     Temp: true,
     Humidity: false,
@@ -53,10 +53,15 @@ export default function ComparisonChart({ data }) {
     })
   }
 
-  const formatted = data.map(d => ({
-    ...d,
-    time: new Date(d.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  }))
+  const formatted = data.map(d => {
+    const timeStr = d.time || d.recorded_at
+    let timeLabel = timeStr
+    if (timeStr && timeStr.includes("T")) {
+      const [h, m] = timeStr.split("T")[1].split(":")
+      timeLabel = `${h}:${m} ${timezoneAbbr || ""}`.trim()
+    }
+    return { ...d, time: timeLabel }
+  })
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row gap-6">

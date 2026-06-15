@@ -1,13 +1,21 @@
 import React from "react"
 import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
-export default function FuturePredictionChart({ data = [] }) {
-  const formattedData = data.map(d => ({
-    ...d,
-    time: new Date(d.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-    // Generate range array [min, max] between temperature and precipitation probability to shade the region between them
-    range: [d.temperature ?? 0, d.precip_prob ?? 0]
-  }))
+export default function FuturePredictionChart({ data = [], timezoneAbbr }) {
+  const formattedData = data.map(d => {
+    const timeStr = d.time || d.recorded_at
+    let timeLabel = timeStr
+    if (timeStr && timeStr.includes("T")) {
+      const [h, m] = timeStr.split("T")[1].split(":")
+      timeLabel = `${h}:${m} ${timezoneAbbr || ""}`.trim()
+    }
+    return {
+      ...d,
+      time: timeLabel,
+      // Generate range array [min, max] between temperature and precipitation probability to shade the region between them
+      range: [d.temperature ?? 0, d.precip_prob ?? 0]
+    }
+  })
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col h-full">

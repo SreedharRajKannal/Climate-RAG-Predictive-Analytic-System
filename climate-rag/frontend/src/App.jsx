@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { 
   fetchConditions, 
-  fetchHistory, 
   fetchAdvisory, 
-  fetchForecast, 
   fetchComparison, 
-  updateLocation 
+  updateLocation,
+  fetchOpenMeteoHistory,
+  fetchOpenMeteoForecast
 } from "./api"
 import ConditionCard from "./components/ConditionCard"
 import AdvisoryPanel from "./components/AdvisoryPanel"
@@ -24,6 +24,8 @@ export default function App() {
   const [advisory, setAdvisory] = useState(null)
   const [severity, setSeverity] = useState("Informational")
   const [source, setSource] = useState("rag")
+  const [timezoneAbbr, setTimezoneAbbr] = useState("")
+  const [utcOffsetSeconds, setUtcOffsetSeconds] = useState(0)
 
   // Location search state
   const [searchQuery, setSearchQuery] = useState("")
@@ -42,20 +44,65 @@ export default function App() {
       const lon = targetCoords?.lon
       const [cond, hist, adv, fore, comp] = await Promise.all([
         fetchConditions(lat, lon),
-        fetchHistory(lat, lon),
+        fetchOpenMeteoHistory(lat, lon),
         fetchAdvisory(lat, lon),
-        fetchForecast(lat, lon),
+        fetchOpenMeteoForecast(lat, lon),
         fetchComparison(lat, lon)
       ])
       
       setConditions(cond.data)
-      setHistory(hist.data)
+      setTimezoneAbbr(cond.data.timezone_abbreviation || "UTC")
+      setUtcOffsetSeconds(cond.data.utc_offset_seconds || 0)
+      
+      // Filter history for exactly the last 24h
+      const now = new Date()
+      if (hist.data && hist.data.hourly) {
+        const offsetMs = (cond.data.utc_offset_seconds || 0) * 1000
+        const hTimes = hist.data.hourly.time
+        const filteredHistory = []
+        for (let i = 0; i < hTimes.length; i++) {
+          // parse local string by assuming UTC then adding offset
+          const tDate = new Date(hTimes[i] + "Z")
+          const realDate = new Date(tDate.getTime() - offsetMs)
+          const diffMs = now - realDate
+          if (diffMs >= 0 && diffMs <= 24 * 3600 * 1000) {
+            filteredHistory.push({
+              time: hTimes[i],
+              temperature: hist.data.hourly.temperature_2m[i],
+              humidity: hist.data.hourly.relative_humidity_2m[i],
+              uv_index: hist.data.hourly.uv_index ? hist.data.hourly.uv_index[i] : 0,
+              precip_prob: hist.data.hourly.precipitation_probability[i]
+            })
+          }
+        }
+        setHistory(filteredHistory)
+      }
+
+      // Filter forecast for exactly the next 24h
+      if (fore.data && fore.data.hourly) {
+        const offsetMs = (cond.data.utc_offset_seconds || 0) * 1000
+        const fTimes = fore.data.hourly.time
+        const filteredForecast = []
+        for (let i = 0; i < fTimes.length; i++) {
+          const tDate = new Date(fTimes[i] + "Z")
+          const realDate = new Date(tDate.getTime() - offsetMs)
+          const diffMs = realDate - now
+          if (diffMs > 0 && diffMs <= 24 * 3600 * 1000) {
+            filteredForecast.push({
+              time: fTimes[i],
+              temperature: fore.data.hourly.temperature_2m[i],
+              precip_prob: fore.data.hourly.precipitation_probability[i]
+            })
+          }
+        }
+        setForecast(filteredForecast)
+      }
+
       setAdvisory(adv.data.advisory)
       setSeverity(adv.data.severity)
       setSource(adv.data.source)
       
-      if (!fore.data.error) setForecast(fore.data)
-      if (!comp.data.error) setComparison(fore.data.error ? [] : comp.data)
+      if (!comp.data.error) setComparison(comp.data.error ? [] : comp.data)
     } catch (e) {
       console.error("Error loading dashboard data", e)
     } finally {
@@ -168,7 +215,17 @@ export default function App() {
                     Updating dashboard...
                   </span>
                 ) : conditions?.recorded_at ? (
-                  <span>Last updated {new Date(conditions.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>
+                    Last updated {(() => {
+                      // Format the current time in the target timezone manually
+                      const d = new Date()
+                      const utc = d.getTime() + (d.getTimezoneOffset() * 60000)
+                      const targetDate = new Date(utc + (utcOffsetSeconds * 1000))
+                      const hrs = targetDate.getHours().toString().padStart(2, "0")
+                      const mins = targetDate.getMinutes().toString().padStart(2, "0")
+                      return `${hrs}:${mins} ${timezoneAbbr}`
+                    })()}
+                  </span>
                 ) : (
                   <span>Loading dashboard...</span>
                 )}
@@ -285,7 +342,12 @@ export default function App() {
             </div>
 
             {/* Sun Cycle Visualizer — part of left section */}
-            <SunVisualizer sunrise={conditions?.sunrise} sunset={conditions?.sunset} />
+            <SunVisualizer 
+              sunrise={conditions?.sunrise} 
+              sunset={conditions?.sunset} 
+              sunriseTomorrow={conditions?.sunrise_tomorrow}
+              utcOffsetSeconds={utcOffsetSeconds} 
+            />
           </section>
 
           {/* RIGHT COLUMN: AI Advisory Panel (60% width -> 3/5 columns) */}
@@ -295,7 +357,7 @@ export default function App() {
             <AdvisoryPanel advisory={advisory} severity={severity} source={source} />
             
             {/* Comparison Graph — "Previous Prediction vs Current" */}
-            <ComparisonChart data={comparison} />
+            <ComparisonChart data={comparison} timezoneAbbr={timezoneAbbr} />
 
           </section>
         </div>
@@ -303,8 +365,8 @@ export default function App() {
         {/* BOTTOM SECTION: History & Trend Graphs — Full Width */}
         <section className="flex flex-col gap-6">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <TrendChart data={history} />
-            <FuturePredictionChart data={forecast} />
+            <TrendChart data={history} timezoneAbbr={timezoneAbbr} />
+            <FuturePredictionChart data={forecast} timezoneAbbr={timezoneAbbr} />
           </div>
         </section>
 

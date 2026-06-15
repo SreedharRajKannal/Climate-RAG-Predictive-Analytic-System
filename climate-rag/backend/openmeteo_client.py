@@ -69,9 +69,12 @@ def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
             "relative_humidity_2m",
             "precipitation_probability",
             "wind_speed_10m",
+            "uv_index",
         ],
         "daily": ["sunrise", "sunset"],
         "timezone": "auto",
+        "past_days": 1,
+        "forecast_days": 2,
     }
     attempt = 0
     while attempt < MAX_RETRIES:
@@ -123,17 +126,25 @@ def get_current_weather(lat: float, lon: float) -> Dict[str, Any]:
     payload = get_weather_data(lat, lon)
     return payload.get("current", {})
 
-# Helper used by the API layer for sunrise / sunset.
-def get_daily_sunrise_sunset(lat: float, lon: float) -> Tuple[str, str]:
+# Helper used by the API layer for sunrise / sunset and timezone metadata.
+def get_location_metadata(lat: float, lon: float) -> Tuple[str, str, str, str, int]:
     payload = get_weather_data(lat, lon)
     daily = payload.get("daily", {})
-    sunrise = daily.get("sunrise", [None])[0]
-    sunset = daily.get("sunset", [None])[0]
-    return sunrise, sunset
+    sunrises = daily.get("sunrise", [])
+    sunsets = daily.get("sunset", [])
+    
+    # Need to account for past_days=1 shifting the array index! 
+    # daily[0] is yesterday, daily[1] is today, daily[2] is tomorrow
+    sunrise_today = sunrises[1] if len(sunrises) > 1 else None
+    sunset_today = sunsets[1] if len(sunsets) > 1 else None
+    sunrise_tomorrow = sunrises[2] if len(sunrises) > 2 else None
+    
+    tz_abbr = payload.get("timezone_abbreviation", "UTC")
+    utc_offset = payload.get("utc_offset_seconds", 0)
+    
+    return sunrise_today, sunset_today, sunrise_tomorrow, tz_abbr, utc_offset
 
 # Helper for hourly forecast used by ``/forecast`` and ``/comparison`` endpoints.
 def get_hourly_forecast(lat: float, lon: float) -> Dict[str, Any]:
     payload = get_weather_data(lat, lon)
     return payload.get("hourly", {})
-
-"""End of openmeteo_client.py"""

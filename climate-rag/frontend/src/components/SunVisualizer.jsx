@@ -1,39 +1,51 @@
 import React from "react"
 
-export default function SunVisualizer({ sunrise, sunset }) {
-  // Parse iso date string (e.g. "2026-06-11T06:05")
+export default function SunVisualizer({ sunrise, sunset, sunriseTomorrow, utcOffsetSeconds, timezoneAbbr }) {
+  // Parse iso date string (e.g. "2026-06-11T06:05") strictly as target local time
   const parseToMinutes = (dateStr) => {
     if (!dateStr) return null
-    try {
-      const date = new Date(dateStr)
-      return date.getHours() * 60 + date.getMinutes()
-    } catch (e) {
-      return null
-    }
+    const parts = dateStr.split("T")
+    if (parts.length !== 2) return null
+    const [h, m] = parts[1].split(":")
+    return parseInt(h, 10) * 60 + parseInt(m, 10)
   }
 
   const formatTimeStr = (dateStr) => {
     if (!dateStr) return "--:--"
-    try {
-      const date = new Date(dateStr)
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    } catch (e) {
-      return "--:--"
-    }
+    const parts = dateStr.split("T")
+    if (parts.length !== 2) return "--:--"
+    const [hStr, mStr] = parts[1].split(":")
+    const h = parseInt(hStr, 10)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12.toString().padStart(2, '0')}:${mStr} ${ampm} ${timezoneAbbr || ""}`.trim()
   }
 
-  const now = new Date()
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  // Calculate current time in target city
+  const d = new Date()
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000)
+  const targetDate = new Date(utc + ((utcOffsetSeconds || 0) * 1000))
+  const currentMinutes = targetDate.getHours() * 60 + targetDate.getMinutes()
+
   const riseMinutes = parseToMinutes(sunrise) ?? (6 * 60) // Fallback 6:00 AM
   const setMinutes = parseToMinutes(sunset) ?? (18 * 60 + 30) // Fallback 6:30 PM
 
   // Calculate sun position percentage
   let fraction = 0
   let isDay = false
+  let nextSunrise = sunrise
 
   if (currentMinutes >= riseMinutes && currentMinutes <= setMinutes) {
     fraction = (currentMinutes - riseMinutes) / (setMinutes - riseMinutes)
     isDay = true
+  } else if (currentMinutes > setMinutes) {
+    fraction = 1
+    isDay = false
+    nextSunrise = sunriseTomorrow || sunrise
+  } else if (currentMinutes < riseMinutes) {
+    fraction = 0
+    isDay = false
+    nextSunrise = sunrise
   }
 
   // Coordinates on a 200x100 SVG space (radius 80, center at 100,100)
@@ -83,6 +95,11 @@ export default function SunVisualizer({ sunrise, sunset }) {
               <stop offset="50%" stopColor="#fbbf24" />
               <stop offset="100%" stopColor="#818cf8" />
             </linearGradient>
+            <linearGradient id="moon-gradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#94a3b8" />
+              <stop offset="50%" stopColor="#cbd5e1" />
+              <stop offset="100%" stopColor="#38bdf8" />
+            </linearGradient>
           </defs>
           <style dangerouslySetInnerHTML={{
             __html: `
@@ -107,10 +124,10 @@ export default function SunVisualizer({ sunrise, sunset }) {
           />
 
           {/* Dotted path glow if daytime (completed path is lit) */}
-          {isDay && (
+          {(isDay || fraction === 1) && (
             <path
               d={`M 20 90 A 80 80 0 0 1 ${sunX} ${sunY}`}
-              stroke="url(#sun-gradient)"
+              stroke={isDay ? "url(#sun-gradient)" : "url(#moon-gradient)"}
               strokeWidth="2"
             />
           )}
@@ -118,17 +135,16 @@ export default function SunVisualizer({ sunrise, sunset }) {
           {/* Horizon baseline */}
           <line x1="10" y1="90" x2="190" y2="90" stroke="#475569" strokeWidth="1.5" />
 
-          {/* Dynamically moving sun icon with time */}
+          {/* Dynamically moving sun/moon icon with time */}
           {isDay ? (
             <g transform={`translate(${sunX - 7}, ${sunY - 7})`} className="glow-sun">
               <circle cx="7" cy="7" r="5" fill="#fbbf24" />
-              {/* Sun rays */}
               <circle cx="7" cy="7" r="7" stroke="#fbbf24" strokeWidth="0.8" strokeDasharray="2 1" />
             </g>
           ) : (
-            // Moon icon centered at top during night
-            <g transform={`translate(100, 40)`} className="glow-moon">
-              <path d="M-2,-4 A5,5 0 1,0 6,4 A4,4 0 1,1 -2,-4" fill="#94a3b8" />
+            // Moon icon (crescent SVG) at either horizon
+            <g transform={`translate(${sunX - 7}, ${sunY - 7})`} className="glow-moon">
+              <path d="M 12 2 A 8.5 8.5 0 0 1 12 14 A 8.5 8.5 0 0 0 12 2 Z" fill="#cbd5e1" transform="rotate(-30 7 7) scale(0.9)" />
             </g>
           )}
 
@@ -148,14 +164,23 @@ export default function SunVisualizer({ sunrise, sunset }) {
 
         {/* Legend */}
         <div className="flex w-full justify-between px-3 mt-1 text-[11px] text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-            <span>Sunrise: {formatTimeStr(sunrise)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
-            <span>Sunset: {formatTimeStr(sunset)}</span>
-          </div>
+          {isDay ? (
+            <>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                <span>Sunrise: {formatTimeStr(sunrise)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
+                <span>Sunset: {formatTimeStr(sunset)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 justify-center w-full">
+              <span className="w-1.5 h-1.5 bg-blue-300 rounded-full" />
+              <span>Next sunrise: {formatTimeStr(nextSunrise)}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

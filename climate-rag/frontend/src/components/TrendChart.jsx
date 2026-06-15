@@ -1,11 +1,16 @@
 import React from "react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
-export default function TrendChart({ data = [] }) {
-  const formattedData = data.map(d => ({
-    ...d,
-    time: new Date(d.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-  }))
+export default function TrendChart({ data = [], timezoneAbbr }) {
+  const formattedData = data.map(d => {
+    const timeStr = d.time || d.recorded_at
+    let timeLabel = timeStr
+    if (timeStr && timeStr.includes("T")) {
+      const [h, m] = timeStr.split("T")[1].split(":")
+      timeLabel = `${h}:${m} ${timezoneAbbr || ""}`.trim()
+    }
+    return { ...d, time: timeLabel }
+  })
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col h-full">

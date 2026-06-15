@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import List
 import asyncio
 import requests
-from openmeteo_client import get_daily_sunrise_sunset, get_hourly_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast
 
 connected_clients: List[WebSocket] = []
 
@@ -37,7 +37,7 @@ app.add_middleware(
 # ── REST ENDPOINTS ────────────────────────────────────────
 
 import requests
-from openmeteo_client import get_daily_sunrise_sunset, get_hourly_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast
 
 def get_readings_by_location(db, lat: float, lon: float, limit: int = None, since = None):
     query = db.query(WeatherReading)
@@ -79,9 +79,12 @@ def get_conditions(lat: float = None, lon: float = None):
     if not reading:
         return {"error": "No data yet"}
 
-    # Dynamically fetch sunrise/sunset
+    # Dynamically fetch sunrise/sunset and timezone
     sunrise = None
     sunset = None
+    sunrise_tomorrow = None
+    tz_abbr = "UTC"
+    utc_offset = 0
     try:
         active_lat, active_lon = None, None
         if lat is not None and lon is not None:
@@ -95,9 +98,9 @@ def get_conditions(lat: float = None, lon: float = None):
                 active_lat, active_lon = coords[0].strip(), coords[1].strip()
             
         if active_lat and active_lon:
-            sunrise, sunset = get_daily_sunrise_sunset(float(active_lat), float(active_lon))
+            sunrise, sunset, sunrise_tomorrow, tz_abbr, utc_offset = get_location_metadata(float(active_lat), float(active_lon))
     except Exception as e:
-        print(f"Error fetching sunrise/sunset: {e}")
+        print(f"Error fetching metadata: {e}")
 
     return {
         "recorded_at": reading.recorded_at.isoformat() if reading.recorded_at else None,
@@ -113,7 +116,10 @@ def get_conditions(lat: float = None, lon: float = None):
         "cloud_cover": reading.cloud_cover,
         "aqi":         reading.aqi,
         "sunrise":     sunrise,
-        "sunset":      sunset
+        "sunset":      sunset,
+        "sunrise_tomorrow": sunrise_tomorrow,
+        "timezone_abbreviation": tz_abbr,
+        "utc_offset_seconds": utc_offset
     }
 
 
@@ -176,14 +182,6 @@ def get_comparison(lat: float = None, lon: float = None):
     db.close()
 
     try:
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": latitude,
-            "longitude": longitude,
-            "past_days": 1,
-            "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation_probability", "wind_speed_10m"],
-            "timezone": "auto"
-        }
         hourly = get_hourly_forecast(latitude, longitude)
         
         times = hourly.get("time", [])
@@ -193,48 +191,41 @@ def get_comparison(lat: float = None, lon: float = None):
         winds = hourly.get("wind_speed_10m", [])
         
         comparison_data = []
-        for r in readings:
-            r_hour = r.recorded_at.hour
-            closest_idx = -1
-            min_diff = timedelta(hours=2)
+        now = datetime.utcnow()
+        # Find exactly the last 24 hours in the Open-Meteo hourly array
+        for idx, t_str in enumerate(times):
+            t_val = datetime.fromisoformat(t_str).replace(tzinfo=None)
+            diff = (now - t_val).total_seconds()
             
-            for idx, t_str in enumerate(times):
-                t_val = datetime.fromisoformat(t_str)
-                diff = abs(r.recorded_at - t_val.replace(tzinfo=None))
-                if diff < min_diff:
-                    min_diff = diff
-                    closest_idx = idx
-            
-            if closest_idx != -1:
-                comparison_data.append({
-                    "recorded_at": r.recorded_at,
-                    "temp_current": r.temperature,
-                    "temp_predicted": temps[closest_idx],
-                    "humidity_current": r.humidity,
-                    "humidity_predicted": humidities[closest_idx],
-                    "rain_current": r.precip_prob,
-                    "rain_predicted": precips[closest_idx],
-                    "wind_current": r.wind_speed,
-                    "wind_predicted": winds[closest_idx]
-                })
+            # If within last 24h
+            if 0 <= diff <= 24 * 3600:
+                # Find the closest DB reading
+                closest_reading = None
+                min_diff = timedelta(hours=1)
+                
+                for r in readings:
+                    r_diff = abs(r.recorded_at - t_val)
+                    if r_diff < min_diff:
+                        min_diff = r_diff
+                        closest_reading = r
+                
+                if closest_reading:
+                    comparison_data.append({
+                        "recorded_at": t_str,
+                        "temp_current": closest_reading.temperature,
+                        "temp_predicted": temps[idx],
+                        "humidity_current": closest_reading.humidity,
+                        "humidity_predicted": humidities[idx],
+                        "rain_current": closest_reading.precip_prob,
+                        "rain_predicted": precips[idx],
+                        "wind_current": closest_reading.wind_speed,
+                        "wind_predicted": winds[idx]
+                    })
         
         return comparison_data
     except Exception as e:
         print(f"Error fetching comparison forecast: {e}")
-        return [
-            {
-                "recorded_at": r.recorded_at,
-                "temp_current": r.temperature,
-                "temp_predicted": r.temperature + 0.5,
-                "humidity_current": r.humidity,
-                "humidity_predicted": r.humidity - 1.0,
-                "rain_current": r.precip_prob,
-                "rain_predicted": r.precip_prob + 2.0,
-                "wind_current": r.wind_speed,
-                "wind_predicted": r.wind_speed - 0.5
-            }
-            for r in readings
-        ]
+        return []
 
 
 @app.get("/history")
