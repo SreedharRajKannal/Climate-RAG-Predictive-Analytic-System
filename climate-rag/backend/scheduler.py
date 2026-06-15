@@ -19,13 +19,13 @@ def set_location(lat: float, lon: float, name: str):
 def fetch_and_store():
     try:
         # Use the zero‑dependency client to fetch current weather and cache it.
-        from openmeteo_client import get_current_weather, get_daily_sunrise_sunset
+        from openmeteo_client import get_current_weather, get_location_metadata
         lat = float(LAT)
         lon = float(LON)
         data = get_current_weather(lat, lon)
 
-        # Fetch sunrise/sunset via the same wrapper (they are part of the daily payload).
-        sunrise, sunset = get_daily_sunrise_sunset(lat, lon)
+        # Fetch sunrise/sunset via the same wrapper
+        sunrise, sunset, _, _, _ = get_location_metadata(lat, lon)
         # AQI fetch remains unchanged – external service may still fail.
         aqi_val = None
         try:

@@ -162,6 +162,23 @@ def get_hourly_forecast(lat: float, lon: float) -> Dict[str, Any]:
     payload = get_weather_data(lat, lon)
     return payload.get("hourly", {})
 
+# Search city via Open-Meteo Geocoding API
+def search_city(query: str) -> List[Dict[str, Any]]:
+    """Proxy for Open-Meteo geocoding to avoid frontend CORS and rate limits."""
+    if not query or len(query) < 2:
+        return []
+    url = "https://geocoding-api.open-meteo.com/v1/search"
+    params = {"name": query, "count": 5, "format": "json"}
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("results", [])
+    except Exception as e:
+        print(f"Geocoding error: {e}")
+        return []
+
+
 # Daily forecast for the 7-day view.
 def get_daily_forecast(lat: float, lon: float) -> List[Dict[str, Any]]:
     """Return 7-day daily forecast data."""

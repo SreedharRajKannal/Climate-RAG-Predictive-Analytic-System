@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import List
 import asyncio
 import requests
-from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast, search_city
 
 connected_clients: List[WebSocket] = []
 
@@ -37,7 +37,7 @@ app.add_middleware(
 # ── REST ENDPOINTS ────────────────────────────────────────
 
 import requests
-from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast
+from openmeteo_client import get_location_metadata, get_hourly_forecast, get_air_quality, get_daily_forecast, search_city
 
 def get_readings_by_location(db, lat: float, lon: float, limit: int = None, since = None):
     query = db.query(WeatherReading)
@@ -210,6 +210,13 @@ def get_daily_forecast_endpoint(lat: float = None, lon: float = None):
         return get_daily_forecast(latitude, longitude)
     except Exception as e:
         return {"error": f"Failed to fetch daily forecast: {e}"}
+
+@app.get("/search-city")
+def search_city_endpoint(q: str):
+    try:
+        return search_city(q)
+    except Exception as e:
+        return {"error": f"Failed to search city: {e}"}
 
 
 @app.get("/history")

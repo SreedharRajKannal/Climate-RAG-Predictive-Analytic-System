@@ -29,6 +29,8 @@ export const fetchDailyForecast = (lat, lon) =>
 
 export const updateLocation = (lat, lon, name) => axios.post(`${BASE}/location?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`)
 
+export const searchCities = (query) => axios.get(`${BASE}/search-city?q=${encodeURIComponent(query)}`)
+
 export const fetchOpenMeteoHistory = (lat, lon) => 
   axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,uv_index&timezone=auto&past_days=1&forecast_days=0`)
 
