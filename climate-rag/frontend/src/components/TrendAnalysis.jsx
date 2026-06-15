@@ -7,16 +7,19 @@ export default function TrendAnalysis({ forecast }) {
   if (!forecast || forecast.length === 0) return null
 
   // Process data for charts
-  const data = forecast.slice(0, 24).map(f => {
+  const data = []
+  for (let i = 0; i < Math.min(24, forecast.length); i++) {
+    const f = forecast[i]
+    if (f.temperature == null || f.temperature > 100 || f.temperature < -100) continue
     const d = new Date(f.time)
-    return {
+    data.push({
       time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       temp: f.temperature,
       hum: f.humidity,
       rain: f.precip_prob,
       wind: f.wind_speed
-    }
-  })
+    })
+  }
 
   const tabs = [
     { id: "temp", label: "Temperature", color: "var(--c-primary)", dataKey: "temp", unit: "°C" },

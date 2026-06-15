@@ -21,15 +21,17 @@ collection    = chroma_client.get_or_create_collection(
 )
 
 llm = Ollama(
-    model    = os.getenv("OLLAMA_MODEL", "gemma3:4b"),
+    model    = os.getenv("OLLAMA_MODEL", "tinyllama"),
     base_url = OLLAMA_HOST,
     temperature = 0.1
 )
 
 prompt_template = PromptTemplate(
-    input_variables=["conditions", "context"],
+    input_variables=["conditions", "context", "computed_risk"],
     template="""
 You are a highly advanced AI Climate Intelligence system. Based on the current weather conditions and the historical/safety guidelines retrieved below, analyze the situation and generate a structured JSON response. 
+
+CRITICAL CONSTRAINT: The deterministic risk level for these conditions has been pre-computed as "{computed_risk}". You MUST set the "risk_level" field exactly to "{computed_risk}" in your JSON output. Do not invent your own risk level. Ensure your narrative and impact explanations align logically with a "{computed_risk}" risk level.
 
 Current conditions:
 {conditions}
@@ -193,14 +195,37 @@ def get_fallback_advisory(reading) -> dict:
         "potential_impact": impact
     }
 
+def compute_risk_level(reading) -> str:
+    risk = "Low"
+    if reading.precip_prob and reading.precip_prob >= 70.0:
+        risk = "Moderate"
+    if reading.precip_prob and reading.precip_prob >= 90.0:
+        risk = "High"
+    if reading.uv_index and reading.uv_index >= 8.0:
+        risk = "High"
+    if reading.aqi and reading.aqi >= 150:
+        risk = "High"
+    
+    # Heat overrides others if more severe
+    if reading.feels_like and reading.feels_like >= 37.0:
+        risk = "Moderate" if risk == "Low" else risk
+    if reading.feels_like and reading.feels_like >= 42.0:
+        risk = "High"
+    if reading.feels_like and reading.feels_like >= 48.0:
+        risk = "Severe"
+        
+    return risk
+
 def generate_advisory(reading) -> dict:
     conditions_text = format_conditions(reading)
     context, retrieved_chunks = retrieve_context(conditions_text)
+    computed_risk = compute_risk_level(reading)
 
     try:
         response_text = chain.invoke({
             "conditions": conditions_text,
-            "context":    context
+            "context":    context,
+            "computed_risk": computed_risk
         })
         
         parsed_json = extract_json_from_text(response_text)

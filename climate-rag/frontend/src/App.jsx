@@ -9,18 +9,18 @@ import {
 } from "./api"
 import CommandPalette from "./components/CommandPalette"
 import AiCommandCenter from "./components/AiCommandCenter"
-import ForecastConfidenceChart from "./components/ForecastConfidenceChart"
 import DailyForecast from "./components/DailyForecast"
-import AccuracyValidationChart from "./components/AccuracyValidationChart"
 import RagTimeline from "./components/RagTimeline"
 import TrendAnalysis from "./components/TrendAnalysis"
 import ActionCenter from "./components/ActionCenter"
-import CurrentWeatherCompact from "./components/CurrentWeatherCompact"
 import CompactAqi from "./components/CompactAqi"
 import SunVisualizer from "./components/SunVisualizer"
 import WeatherAlerts from "./components/WeatherAlerts"
 import PredictionAccuracy from "./components/PredictionAccuracy"
 import AiPredictionTimeline from "./components/AiPredictionTimeline"
+import CurrentWeatherHero from "./components/CurrentWeatherHero"
+import HourlyForecast from "./components/HourlyForecast"
+import AccuracyValidationChart from "./components/AccuracyValidationChart"
 
 export default function App() {
   const [theme, setTheme] = useState("dark")
@@ -92,7 +92,6 @@ export default function App() {
     if (!conditions) return null
     const locString = conditions.location || "Unknown Location"
     
-    // Attempt to parse out city and country if they exist in the string
     let displayLoc = locString
     if (locString.includes("(")) {
       displayLoc = locString.split("(")[0].trim()
@@ -102,26 +101,17 @@ export default function App() {
     const offsetHours = conditions.utc_offset_seconds ? (conditions.utc_offset_seconds / 3600) : 0
     const offsetStr = offsetHours >= 0 ? `+${offsetHours}` : `${offsetHours}`
     
-    const localTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
     return (
       <div style={{
         marginTop: "16px",
         marginBottom: "32px",
-        padding: "16px",
-        background: "var(--c-surface)",
-        borderRadius: "var(--radius-md)",
-        border: "1px solid var(--c-border)",
         display: "flex",
         flexDirection: "column",
         gap: "8px"
       }}>
         <div style={{fontSize: "14px", fontWeight: "600"}}>📍 {displayLoc}</div>
         <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
-          🕒 {localTime} {tzAbbr} (GMT{offsetStr})
-        </div>
-        <div style={{fontSize: "11px", color: "var(--c-text-muted)"}}>
-          Last updated {lastUpdated}
+          🕒 {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {tzAbbr} (GMT{offsetStr})
         </div>
       </div>
     )
@@ -130,7 +120,7 @@ export default function App() {
   return (
     <div className="dashboard-layout">
       {/* HEADER */}
-      <header className="dashboard-header" style={{paddingBottom: "16px"}}>
+      <header className="dashboard-header" style={{paddingBottom: "16px", borderBottom: "1px solid var(--c-border)"}}>
         <div className="header-logo">
           <div className="logo-icon">✦</div>
           <h1 className="logo-text">Climate Intelligence</h1>
@@ -164,65 +154,57 @@ export default function App() {
 
       {errorMsg && <div className="error-banner" style={{color: "var(--c-danger)", padding: "16px", background: "rgba(239, 68, 68, 0.1)", borderRadius: "var(--radius-md)", border: "1px solid var(--c-danger)", marginBottom: "24px"}}>{errorMsg}</div>}
 
-      <main className="dashboard-main">
+      <main className="dashboard-main" style={{display: "flex", flexDirection: "column", gap: "24px"}}>
         <WeatherAlerts conditions={conditions} />
 
-        {/* 1. AI Command Center */}
-        <AiCommandCenter advisoryData={advisoryData} />
+        {/* 1. CURRENT CONDITIONS HERO */}
+        <CurrentWeatherHero conditions={conditions} dailyData={dailyForecast} />
 
-        {/* 2. Forecast Confidence */}
-        <PredictionAccuracy advisoryData={advisoryData} />
-
-        <div className="grid-2col" style={{marginTop: "16px"}}>
-          {/* 3. AI Prediction Timeline */}
-          <AiPredictionTimeline forecast={forecast} />
-
-          {/* 4. Forecast Confidence Chart / Trend Graph */}
-          <ForecastConfidenceChart forecast={forecast} />
+        {/* 2. AI ADVISORY */}
+        <div>
+          <AiCommandCenter advisoryData={advisoryData} />
+          <PredictionAccuracy advisoryData={advisoryData} />
         </div>
 
-        {/* 5. Current Weather Summary */}
-        <div style={{marginTop: "16px"}}>
-          <h3 className="section-title" style={{marginBottom: "16px"}}>Current Conditions</h3>
-          <CurrentWeatherCompact conditions={conditions} />
-        </div>
-
-        {/* 6. 7-Day Forecast */}
-        <div style={{marginTop: "16px"}}>
-           <h3 className="section-title" style={{marginBottom: "16px"}}>7-Day Forecast</h3>
-           <DailyForecast dailyData={dailyForecast} />
-        </div>
-
-        {/* 7. Weather Metrics Grid (Trend Analysis acts as the dense interactive grid) */}
+        {/* 3. TEMPERATURE + RAIN TRENDS */}
         <TrendAnalysis forecast={forecast} />
 
-        <div className="grid-2col" style={{marginTop: "16px"}}>
-          {/* 8. AQI Intelligence Card */}
-          <CompactAqi airQuality={airQuality} />
-          
-          {/* Action Center is kept for continuity */}
+        {/* 4. AI PREDICTION TIMELINE */}
+        <AiPredictionTimeline forecast={forecast} />
+
+        {/* 5. 24 HOUR FORECAST */}
+        <HourlyForecast forecast={forecast} />
+
+        {/* 6. 7 DAY FORECAST */}
+        <DailyForecast dailyData={dailyForecast} />
+
+        <div className="grid-2col">
+          {/* 7. ACTIVITY SCORES */}
           <ActionCenter conditions={conditions} advisoryData={advisoryData} />
+          
+          <div style={{display: "flex", flexDirection: "column", gap: "24px", marginTop: "16px"}}>
+            {/* 8. AQI CARD */}
+            <CompactAqi airQuality={airQuality} />
+
+            {/* 10. SUN & MOON */}
+            <SunVisualizer 
+              sunrise={conditions?.sunrise}
+              sunset={conditions?.sunset}
+            />
+          </div>
         </div>
 
-        <div className="grid-2col" style={{marginTop: "16px"}}>
-          {/* 9. RAG Evidence Panel */}
-          <RagTimeline retrievedChunks={retrievedChunks} />
+        {/* 9. RAG EVIDENCE */}
+        <RagTimeline retrievedChunks={retrievedChunks} />
 
-          {/* 10. Sun & Moon Info */}
-          <SunVisualizer 
-            sunrise={conditions?.sunrise}
-            sunset={conditions?.sunset}
-            timezoneAbbr={conditions?.timezone_abbreviation}
-          />
-        </div>
-
-        {/* AI Accuracy Validation placed at the bottom as proof */}
+        {/* AI Accuracy Validation (Trust builder) */}
         <AccuracyValidationChart lat={coords.lat} lon={coords.lon} />
 
       </main>
 
       <footer style={{textAlign: "center", padding: "40px 0", color: "var(--c-text-muted)", fontSize: "12px", borderTop: "1px solid var(--c-border)", marginTop: "40px"}}>
         <p>AI Climate Intelligence Assistant · Powered by Llama3 & RAG</p>
+        <p style={{marginTop: "8px", opacity: 0.5}}>Last updated: {lastUpdated}</p>
       </footer>
     </div>
   )

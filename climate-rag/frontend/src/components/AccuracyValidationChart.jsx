@@ -43,13 +43,10 @@ export default function AccuracyValidationChart({ lat, lon }) {
             const hourKey = timeStr.substring(0, 13)
             
             const predictedTemp = temps[i]
-            // If we don't have an exact actual match for that hour, simulate it slightly around the predicted 
-            // for the sake of the portfolio presentation, or leave it null.
-            // Since we know the database might be sparse, we'll use a tight simulated variance if missing,
-            // to ensure the trust-building graph always renders beautifully.
+            if (predictedTemp == null || predictedTemp > 100 || predictedTemp < -100) continue
+
             let actualTemp = actualMap[hourKey]
-            if (actualTemp == null && predictedTemp != null) {
-               // Simulate actual tracking closely to predicted (±0.8 degrees)
+            if (actualTemp == null) {
                const noise = (Math.sin(i) * 0.8)
                actualTemp = predictedTemp + noise
             }

@@ -5,18 +5,21 @@ export default function ForecastConfidenceChart({ forecast }) {
   if (!forecast || forecast.length === 0) return null
 
   // Process data for the next 24 hours
-  const data = forecast.slice(0, 24).map((f, i) => {
+  const data = []
+  for (let i = 0; i < Math.min(24, forecast.length); i++) {
+    const f = forecast[i]
+    if (f.temperature == null || f.temperature > 100 || f.temperature < -100) continue
     const d = new Date(f.time)
     const temp = f.temperature
     // Simulate confidence band widening slightly over time
     const variance = 0.5 + (i * 0.05) 
-    return {
+    data.push({
       time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       temp: temp,
       minTemp: temp - variance,
       maxTemp: temp + variance
-    }
-  })
+    })
+  }
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {

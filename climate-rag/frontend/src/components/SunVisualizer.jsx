@@ -1,54 +1,68 @@
 import React from "react"
 
-export default function SunVisualizer({ sunrise, sunset, timezoneAbbr }) {
+export default function SunVisualizer({ sunrise, sunset }) {
   if (!sunrise || !sunset) return null
-
-  // Calculate Golden Hour (roughly 1 hour before sunset)
-  const sunsetDate = new Date(sunset)
-  const goldenHourDate = new Date(sunsetDate.getTime() - (60 * 60 * 1000))
-  
-  // Calculate Moonrise (approximate for demo)
-  const moonriseDate = new Date(sunsetDate.getTime() + (90 * 60 * 1000))
 
   const formatTime = (dateStr) => {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Simplified moon phase determination (static for demo, but could be dynamic)
-  const getMoonPhase = () => "Waxing Crescent"
+  // Calculate percentage of day elapsed
+  const now = new Date()
+  const sRise = new Date(sunrise)
+  const sSet = new Date(sunset)
+  
+  let percent = 0
+  if (now > sRise && now < sSet) {
+    const total = sSet - sRise
+    const elapsed = now - sRise
+    percent = (elapsed / total) * 100
+  } else if (now >= sSet) {
+    percent = 100
+  }
 
   return (
     <div className="card-base" style={{padding: "24px"}}>
-      <div className="section-header">
-        <h3 className="section-title">Sun & Moon</h3>
-      </div>
+      <h3 className="section-title" style={{marginBottom: "24px"}}>Sun Cycle</h3>
       
-      <div style={{display: "flex", flexDirection: "column", gap: "20px", marginTop: "16px"}}>
-        <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-          <span style={{fontSize: "14px", fontWeight: "600"}}>☀ Sunrise</span>
-          <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>{formatTime(sunrise)}</span>
-        </div>
-
-        <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-          <span style={{fontSize: "14px", fontWeight: "600"}}>🌤 Golden Hour</span>
-          <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>{formatTime(goldenHourDate)}</span>
-        </div>
-
-        <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-          <span style={{fontSize: "14px", fontWeight: "600"}}>🌇 Sunset</span>
-          <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>{formatTime(sunset)}</span>
-        </div>
-
-        <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-          <span style={{fontSize: "14px", fontWeight: "600"}}>🌙 Moon Phase</span>
-          <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>{getMoonPhase()}</span>
-        </div>
-
-        <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
-          <span style={{fontSize: "14px", fontWeight: "600"}}>🌙 Moonrise</span>
-          <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>{formatTime(moonriseDate)}</span>
-        </div>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", fontSize: "14px", fontWeight: "600"}}>
+        <span>{formatTime(sunrise)}</span>
+        <span>{formatTime(sunset)}</span>
       </div>
+
+      <div style={{position: "relative", height: "4px", background: "var(--c-border)", borderRadius: "2px", margin: "16px 0"}}>
+        {/* Progress Fill */}
+        <div style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          height: "100%",
+          width: `${percent}%`,
+          background: "linear-gradient(90deg, var(--c-warning), var(--c-primary))",
+          borderRadius: "2px"
+        }} />
+        
+        {/* Current Position Dot */}
+        {percent > 0 && percent < 100 && (
+          <div style={{
+            position: "absolute",
+            left: `calc(${percent}% - 6px)`,
+            top: "-4px",
+            width: "12px",
+            height: "12px",
+            borderRadius: "50%",
+            background: "var(--c-surface)",
+            border: "2px solid var(--c-primary)",
+            boxShadow: "0 0 8px rgba(0,0,0,0.2)"
+          }} />
+        )}
+      </div>
+
+      {percent > 0 && percent < 100 && (
+        <div style={{textAlign: "center", fontSize: "12px", color: "var(--c-text-secondary)", marginTop: "8px"}}>
+          Current Position
+        </div>
+      )}
     </div>
   )
 }
