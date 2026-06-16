@@ -1,7 +1,12 @@
 import React from "react"
 
 export default function AiPredictionTimeline({ forecast }) {
-  if (!forecast || forecast.length < 12) return null
+  if (!forecast || forecast.length === 0) return null
+
+  const now = new Date()
+  const futureForecast = forecast.filter(f => new Date(f.time) >= now && f.temperature != null && f.temperature < 100 && f.temperature > -100)
+
+  if (futureForecast.length < 12) return null
 
   // Function to generate an intelligence string based on a future hour vs current hour
   const getInsight = (current, future) => {
@@ -22,15 +27,15 @@ export default function AiPredictionTimeline({ forecast }) {
     return "Conditions Stabilizing"
   }
 
-  const current = forecast[0]
+  const current = futureForecast[0]
   
   // Extract specific future intervals
   const intervals = [
     { label: "Now", data: current, text: "Current Conditions" },
-    { label: "+3h", data: forecast[3], text: getInsight(current, forecast[3]) },
-    { label: "+6h", data: forecast[6], text: getInsight(forecast[3], forecast[6]) },
-    { label: "+9h", data: forecast[9], text: getInsight(forecast[6], forecast[9]) },
-    { label: "+12h", data: forecast[12], text: getInsight(forecast[9], forecast[12]) }
+    { label: "+3h", data: futureForecast[3], text: getInsight(current, futureForecast[3]) },
+    { label: "+6h", data: futureForecast[6], text: getInsight(futureForecast[3], futureForecast[6]) },
+    { label: "+9h", data: futureForecast[9], text: getInsight(futureForecast[6], futureForecast[9]) },
+    { label: "+12h", data: futureForecast[12], text: getInsight(futureForecast[9], futureForecast[12]) }
   ]
 
   return (

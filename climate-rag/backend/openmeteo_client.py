@@ -66,7 +66,9 @@ def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
             "visibility",
             "dew_point_2m",
             "weather_code",
+            "is_day",
         ],
+
         "hourly": [
             "temperature_2m",
             "relative_humidity_2m",
@@ -76,6 +78,8 @@ def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
             "uv_index",
             "weather_code",
             "apparent_temperature",
+            "is_day",
+            "surface_pressure"
         ],
         "daily": [
             "sunrise",
@@ -86,7 +90,7 @@ def _fetch_remote(lat: float, lon: float) -> Dict[str, Any]:
             "precipitation_probability_max",
         ],
         "timezone": "auto",
-        "past_days": 1,
+        "past_hours": 48,
         "forecast_days": 7,
     }
     attempt = 0

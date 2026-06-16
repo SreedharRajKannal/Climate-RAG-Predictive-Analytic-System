@@ -169,21 +169,22 @@ def get_forecast(lat: float = None, lon: float = None):
         humidities = hourly.get("relative_humidity_2m", [])
         precips = hourly.get("precipitation_probability", [])
         winds = hourly.get("wind_speed_10m", [])
+        wcodes = hourly.get("weather_code", [])
+        is_days = hourly.get("is_day", [])
+        pressures = hourly.get("surface_pressure", [])
         
         forecast_data = []
-        now = datetime.utcnow()
         for i in range(len(times)):
-            t = datetime.fromisoformat(times[i])
-            if t > now:
-                forecast_data.append({
-                    "time": times[i],
-                    "temperature": temps[i] if i < len(temps) else None,
-                    "humidity": humidities[i] if i < len(humidities) else None,
-                    "precip_prob": precips[i] if i < len(precips) else None,
-                    "wind_speed": winds[i] if i < len(winds) else None,
-                })
-            if len(forecast_data) >= 24:
-                break
+            forecast_data.append({
+                "time": times[i],
+                "temperature": temps[i] if i < len(temps) else None,
+                "humidity": humidities[i] if i < len(humidities) else None,
+                "precip_prob": precips[i] if i < len(precips) else None,
+                "wind_speed": winds[i] if i < len(winds) else None,
+                "weather_code": wcodes[i] if i < len(wcodes) else 0,
+                "is_day": is_days[i] if i < len(is_days) else 1,
+                "surface_pressure": pressures[i] if i < len(pressures) else None,
+            })
                 
         return forecast_data
     except Exception as e:

@@ -21,7 +21,7 @@ collection    = chroma_client.get_or_create_collection(
 )
 
 llm = Ollama(
-    model    = os.getenv("OLLAMA_MODEL", "llama3"),
+    model    = os.getenv("OLLAMA_MODEL", "tinyllama"),
     base_url = OLLAMA_HOST,
     temperature = 0.1
 )

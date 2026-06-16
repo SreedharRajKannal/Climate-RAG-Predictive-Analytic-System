@@ -6,18 +6,26 @@ export default function TrendAnalysis({ forecast }) {
 
   if (!forecast || forecast.length === 0) return null
 
-  // Process data for charts
+  // Process data for charts (Past 24 hours)
+  const now = new Date()
   const data = []
-  for (let i = 0; i < Math.min(24, forecast.length); i++) {
-    const f = forecast[i]
-    if (f.temperature == null || f.temperature > 100 || f.temperature < -100) continue
+  
+  // To get the past 24 hours up to now, we can iterate backwards or forwards.
+  // We want chronological order. We'll find all items < now, and take the last 24 of them.
+  const pastItems = forecast.filter(f => new Date(f.time) <= now && f.temperature != null && f.temperature < 100 && f.temperature > -100)
+  
+  // Take only the most recent 24 from the past
+  const recentPast = pastItems.slice(-24)
+
+  for (const f of recentPast) {
     const d = new Date(f.time)
     data.push({
       time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       temp: f.temperature,
       hum: f.humidity,
       rain: f.precip_prob,
-      wind: f.wind_speed
+      wind: f.wind_speed,
+      pressure: f.surface_pressure
     })
   }
 
@@ -25,7 +33,8 @@ export default function TrendAnalysis({ forecast }) {
     { id: "temp", label: "Temperature", color: "var(--c-primary)", dataKey: "temp", unit: "°C" },
     { id: "hum", label: "Humidity", color: "var(--c-accent)", dataKey: "hum", unit: "%" },
     { id: "rain", label: "Rain", color: "var(--c-success)", dataKey: "rain", unit: "%" },
-    { id: "wind", label: "Wind", color: "var(--c-warning)", dataKey: "wind", unit: "km/h" }
+    { id: "wind", label: "Wind", color: "var(--c-warning)", dataKey: "wind", unit: "km/h" },
+    { id: "pressure", label: "Pressure", color: "var(--c-danger)", dataKey: "pressure", unit: "hPa" }
   ]
 
   const activeTabData = tabs.find(t => t.id === activeTab)

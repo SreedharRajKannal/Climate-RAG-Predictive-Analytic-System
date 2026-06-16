@@ -87,37 +87,7 @@ export default function App() {
     await loadData(city.latitude, city.longitude)
   }
 
-  // Format the location and timezone context
-  const renderLocationContext = () => {
-    if (!conditions) return null
-    const locString = conditions.location || "Unknown Location"
-    
-    let displayLoc = locString
-    if (locString.includes("(")) {
-      displayLoc = locString.split("(")[0].trim()
-    }
-    
-    const tzAbbr = conditions.timezone_abbreviation || "UTC"
-    const offsetHours = conditions.utc_offset_seconds ? (conditions.utc_offset_seconds / 3600) : 0
-    const offsetStr = offsetHours >= 0 ? `+${offsetHours}` : `${offsetHours}`
-    
-    return (
-      <div style={{
-        marginTop: "16px",
-        marginBottom: "32px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px"
-      }}>
-        <div style={{fontSize: "14px", fontWeight: "600"}}>📍 {displayLoc}</div>
-        <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
-          🕒 {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {tzAbbr} (GMT{offsetStr})
-        </div>
-      </div>
-    )
-  }
 
-  return (
     <div className="dashboard-layout">
       {/* HEADER */}
       <header className="dashboard-header" style={{paddingBottom: "16px", borderBottom: "1px solid var(--c-border)"}}>
@@ -149,52 +119,50 @@ export default function App() {
           </select>
         </div>
       </header>
-
-      {renderLocationContext()}
-
       {errorMsg && <div className="error-banner" style={{color: "var(--c-danger)", padding: "16px", background: "rgba(239, 68, 68, 0.1)", borderRadius: "var(--radius-md)", border: "1px solid var(--c-danger)", marginBottom: "24px"}}>{errorMsg}</div>}
 
       <main className="dashboard-main" style={{display: "flex", flexDirection: "column", gap: "24px"}}>
         <WeatherAlerts conditions={conditions} />
 
-        {/* 1. CURRENT CONDITIONS HERO */}
-        <CurrentWeatherHero conditions={conditions} dailyData={dailyForecast} />
+        {/* 2. CURRENT CONDITIONS HERO */}
+        <CurrentWeatherHero conditions={conditions} dailyData={dailyForecast} advisoryData={advisoryData} lastUpdated={lastUpdated} />
 
-        {/* 2. AI ADVISORY */}
-        <div>
-          <AiCommandCenter advisoryData={advisoryData} />
-          <PredictionAccuracy advisoryData={advisoryData} />
-        </div>
-
-        {/* 3. TEMPERATURE + RAIN TRENDS */}
-        <TrendAnalysis forecast={forecast} />
-
-        {/* 4. AI PREDICTION TIMELINE */}
+        {/* 3. AI ADVISORY */}
+        <AiCommandCenter advisoryData={advisoryData} />
+        
+        {/* 4. AI FORECAST TIMELINE */}
         <AiPredictionTimeline forecast={forecast} />
 
-        {/* 5. 24 HOUR FORECAST */}
+        {/* 5. FORECAST CONFIDENCE (CHIPS) */}
+        <PredictionAccuracy advisoryData={advisoryData} />
+
+        {/* 6. 24 HOUR FORECAST */}
         <HourlyForecast forecast={forecast} />
 
-        {/* 6. 7 DAY FORECAST */}
+        {/* 7. 7 DAY FORECAST */}
         <DailyForecast dailyData={dailyForecast} />
 
+        {/* 8. TREND ANALYSIS (PAST 24H) */}
+        <TrendAnalysis forecast={forecast} />
+
         <div className="grid-2col">
-          {/* 7. ACTIVITY SCORES */}
+          {/* 9. ACTIVITY SCORES */}
           <ActionCenter conditions={conditions} advisoryData={advisoryData} />
           
           <div style={{display: "flex", flexDirection: "column", gap: "24px", marginTop: "16px"}}>
-            {/* 8. AQI CARD */}
+            {/* 10. AQI CARD */}
             <CompactAqi airQuality={airQuality} />
 
-            {/* 10. SUN & MOON */}
+            {/* 12. SUN & MOON */}
             <SunVisualizer 
               sunrise={conditions?.sunrise}
               sunset={conditions?.sunset}
+              isDay={conditions?.is_day}
             />
           </div>
         </div>
 
-        {/* 9. RAG EVIDENCE */}
+        {/* 11. RAG EVIDENCE & TRANSPARENCY */}
         <RagTimeline retrievedChunks={retrievedChunks} />
 
         {/* AI Accuracy Validation (Trust builder) */}
@@ -204,7 +172,6 @@ export default function App() {
 
       <footer style={{textAlign: "center", padding: "40px 0", color: "var(--c-text-muted)", fontSize: "12px", borderTop: "1px solid var(--c-border)", marginTop: "40px"}}>
         <p>AI Climate Intelligence Assistant · Powered by Llama3 & RAG</p>
-        <p style={{marginTop: "8px", opacity: 0.5}}>Last updated: {lastUpdated}</p>
       </footer>
     </div>
   )

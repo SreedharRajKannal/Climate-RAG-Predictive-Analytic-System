@@ -35,7 +35,7 @@ export function getConditionType(weatherCode) {
   return WMO_CONDITIONS[weatherCode]?.type || "sunny"
 }
 
-export default function WeatherIcon({ weatherCode, temp, precipProb, cloudCover, size = 64 }) {
+export default function WeatherIcon({ weatherCode, temp, precipProb, cloudCover, isDay = 1, size = 64 }) {
   let type = getConditionType(weatherCode)
   
   // Fallback heuristics if no weather_code provided
@@ -46,6 +46,9 @@ export default function WeatherIcon({ weatherCode, temp, precipProb, cloudCover,
     else if (cloudCover > 30) type = "partly-cloudy"
     else type = "sunny"
   }
+  
+  if (isDay === 0 && type === "sunny") type = "clear-night"
+  if (isDay === 0 && type === "partly-cloudy") type = "cloudy-night"
 
   const s = size
 
@@ -139,6 +142,17 @@ export default function WeatherIcon({ weatherCode, temp, precipProb, cloudCover,
           </svg>
         </>
       )
+    case "cloudy-night":
+      return wrap(
+        <>
+          <svg className="w-3/5 h-3/5 absolute top-1 left-1 wi-float" viewBox="0 0 48 48" fill="none" style={{color:"#e2e8f0"}}>
+             <path d="M26 14A10 10 0 1034 32 12 12 0 0126 14z" fill="currentColor" fillOpacity="0.4" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+          <svg className="w-3/5 h-3/5 absolute bottom-2 right-1" viewBox="0 0 48 48" fill="none">
+            <path d="M34 32a10 10 0 00-2-19.8c-.4-1.2-1-2.4-2-3.4s-2.2-1.6-3.4-2a10 10 0 00-17.8 4.2A10 10 0 0012 32h22z" fill="#475569" fillOpacity="0.35" stroke="#94a3b8" strokeWidth="1.5"/>
+          </svg>
+        </>
+      )
     case "hot":
       return wrap(
         <>
@@ -149,6 +163,14 @@ export default function WeatherIcon({ weatherCode, temp, precipProb, cloudCover,
             ))}
           </svg>
           <div className="absolute inset-0 wi-pulse rounded-full" style={{background:"radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)"}}/>
+        </>
+      )
+    case "clear-night":
+      return wrap(
+        <>
+          <svg className="w-full h-full wi-float" viewBox="0 0 48 48" fill="none" style={{color:"#e2e8f0"}}>
+            <path d="M26 14A10 10 0 1034 32 12 12 0 0126 14z" fill="currentColor" fillOpacity="0.4" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
         </>
       )
     default: // sunny
