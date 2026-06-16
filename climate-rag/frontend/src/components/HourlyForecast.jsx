@@ -1,73 +1,113 @@
-import React from "react"
-import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip, Area, CartesianGrid } from "recharts"
-import WeatherIcon from "./WeatherIcon"
+import React, { useState } from "react"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 
 export default function HourlyForecast({ forecast }) {
+  const [activeTab, setActiveTab] = useState("temp")
+
   if (!forecast || forecast.length === 0) return null
 
-  // Take the next 24 hours from the current time
+  // Process future 24h data
   const now = new Date()
-  const data = []
+  const futureItems = forecast.filter(f => new Date(f.time) >= now && f.temperature != null && f.temperature < 100 && f.temperature > -100)
   
+  const data = []
   let added = 0
-  for (let i = 0; i < forecast.length; i++) {
-    const f = forecast[i]
-    if (f.temperature == null || f.temperature > 100 || f.temperature < -100) continue
-    
-    const d = new Date(f.time)
-    if (d < now && i !== 0) continue // Skip past hours, except maybe the very first exact match
-    
+  for (const f of futureItems) {
     if (added >= 24) break
-
+    const d = new Date(f.time)
     data.push({
       time: added === 0 ? "Now" : d.toLocaleTimeString([], { hour: 'numeric' }),
       temp: f.temperature,
       hum: f.humidity,
       rain: f.precip_prob,
       wind: f.wind_speed,
-      weather_code: f.weather_code,
-      is_day: f.is_day ?? 1
+      pressure: f.surface_pressure
     })
     added++
   }
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const p = payload[0].payload
-      return (
-        <div className="card-base" style={{padding: "12px", border: "1px solid var(--c-border)", background: "var(--c-surface)"}}>
-          <div style={{fontWeight: "600", marginBottom: "8px"}}>{label}</div>
-          <div style={{display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px"}}>
-             <WeatherIcon weatherCode={p.weather_code} isDay={p.is_day} size={24} />
-             <span style={{fontSize: "16px", fontWeight: "700"}}>{Math.round(p.temp)}°</span>
-          </div>
-          <div style={{fontSize: "12px", color: "var(--c-text-secondary)"}}>Rain: {p.rain}%</div>
-          <div style={{fontSize: "12px", color: "var(--c-text-secondary)"}}>Humidity: {p.hum}%</div>
-          <div style={{fontSize: "12px", color: "var(--c-text-secondary)"}}>Wind: {Math.round(p.wind)} km/h</div>
-        </div>
-      )
-    }
-    return null
-  }
+  const tabs = [
+    { id: "temp", label: "Temperature", color: "var(--c-primary)", dataKey: "temp", unit: "°C" },
+    { id: "rain", label: "Rain", color: "var(--c-success)", dataKey: "rain", unit: "%" },
+    { id: "hum", label: "Humidity", color: "var(--c-accent)", dataKey: "hum", unit: "%" },
+    { id: "wind", label: "Wind", color: "var(--c-warning)", dataKey: "wind", unit: "km/h" },
+    { id: "pressure", label: "Pressure", color: "var(--c-danger)", dataKey: "pressure", unit: "hPa" }
+  ]
+
+  const activeTabData = tabs.find(t => t.id === activeTab)
 
   return (
     <div className="card-base" style={{padding: "24px"}}>
-      <h3 className="section-title" style={{marginBottom: "24px"}}>24-Hour Forecast</h3>
-      
-      <div style={{height: "250px", width: "100%"}}>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px", flexWrap: "wrap", gap: "16px"}}>
+        <h3 className="section-title" style={{margin: 0}}>24-Hour Forecast</h3>
+        <div style={{display: "flex", gap: "8px", background: "var(--c-surface-hover)", padding: "4px", borderRadius: "var(--radius-md)", flexWrap: "wrap", marginBottom: "16px"}}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                background: activeTab === tab.id ? "var(--c-surface)" : "transparent",
+                border: activeTab === tab.id ? "1px solid var(--c-border)" : "1px solid transparent",
+                color: activeTab === tab.id ? "var(--c-text-primary)" : "var(--c-text-secondary)",
+                padding: "6px 12px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "12px",
+                fontWeight: activeTab === tab.id ? "600" : "500",
+                cursor: "pointer",
+                boxShadow: activeTab === tab.id ? "var(--shadow-sm)" : "none",
+                transition: "all 0.2s"
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{width: "100%", height: "250px"}}>
         <ResponsiveContainer>
-          <ComposedChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-border)" opacity={0.5} />
-            <XAxis dataKey="time" stroke="var(--c-text-muted)" fontSize={11} tickLine={false} axisLine={false} minTickGap={20} />
-            <YAxis stroke="var(--c-text-muted)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${v}°`} />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--c-border)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-            
-            {/* Smooth Temperature Curve */}
-            <Line type="monotone" dataKey="temp" stroke="var(--c-primary)" strokeWidth={3} dot={false} activeDot={{r: 6, fill: "var(--c-primary)", stroke: "var(--c-surface)", strokeWidth: 2}} />
-            
-            {/* Smooth Rain Probability Area underneath */}
-            <Area type="monotone" dataKey="rain" fill="var(--c-accent)" stroke="none" fillOpacity={0.1} />
-          </ComposedChart>
+          <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`grad-hourly-${activeTab}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={activeTabData.color} stopOpacity={0.3}/>
+                <stop offset="95%" stopColor={activeTabData.color} stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--c-border)" vertical={false} />
+            <XAxis 
+              dataKey="time" 
+              tick={{fill: "var(--c-text-muted)", fontSize: 11}} 
+              tickMargin={10}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={30}
+            />
+            <YAxis 
+              tick={{fill: "var(--c-text-muted)", fontSize: 11}} 
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(val) => `${val}${activeTabData.unit === 'km/h' ? '' : activeTabData.unit}`}
+            />
+            <Tooltip 
+              contentStyle={{
+                backgroundColor: "var(--c-surface)",
+                border: "1px solid var(--c-border)",
+                borderRadius: "var(--radius-md)",
+                boxShadow: "var(--shadow-lg)"
+              }}
+              itemStyle={{color: "var(--c-text-primary)", fontWeight: "600"}}
+              formatter={(value) => [`${value} ${activeTabData.unit}`, activeTabData.label]}
+            />
+            <Area 
+              type="monotone" 
+              dataKey={activeTabData.dataKey} 
+              stroke={activeTabData.color} 
+              strokeWidth={3}
+              fillOpacity={1} 
+              fill={`url(#grad-hourly-${activeTab})`} 
+              animationDuration={500}
+            />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

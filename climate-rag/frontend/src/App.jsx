@@ -15,6 +15,7 @@ import TrendAnalysis from "./components/TrendAnalysis"
 import ActionCenter from "./components/ActionCenter"
 import CompactAqi from "./components/CompactAqi"
 import SunVisualizer from "./components/SunVisualizer"
+import TodaySummary from "./components/TodaySummary"
 import WeatherAlerts from "./components/WeatherAlerts"
 import PredictionAccuracy from "./components/PredictionAccuracy"
 import AiPredictionTimeline from "./components/AiPredictionTimeline"
@@ -87,7 +88,7 @@ export default function App() {
     await loadData(city.latitude, city.longitude)
   }
 
-
+  return (
     <div className="dashboard-layout">
       {/* HEADER */}
       <header className="dashboard-header" style={{paddingBottom: "16px", borderBottom: "1px solid var(--c-border)"}}>
@@ -130,36 +131,41 @@ export default function App() {
         {/* 3. AI ADVISORY */}
         <AiCommandCenter advisoryData={advisoryData} />
         
-        {/* 4. AI FORECAST TIMELINE */}
-        <AiPredictionTimeline forecast={forecast} />
-
-        {/* 5. FORECAST CONFIDENCE (CHIPS) */}
-        <PredictionAccuracy advisoryData={advisoryData} />
-
-        {/* 6. 24 HOUR FORECAST */}
-        <HourlyForecast forecast={forecast} />
-
-        {/* 7. 7 DAY FORECAST */}
-        <DailyForecast dailyData={dailyForecast} />
-
-        {/* 8. TREND ANALYSIS (PAST 24H) */}
-        <TrendAnalysis forecast={forecast} />
-
-        <div className="grid-2col">
-          {/* 9. ACTIVITY SCORES */}
-          <ActionCenter conditions={conditions} advisoryData={advisoryData} />
+        {/* 4. MAIN DASHBOARD GRID */}
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 450px), 1fr))", gap: "24px", alignItems: "start"}}>
+          {/* Left Column */}
+          <div style={{display: "flex", flexDirection: "column"}}>
+            <ActionCenter conditions={conditions} advisoryData={advisoryData} />
+          </div>
           
-          <div style={{display: "flex", flexDirection: "column", gap: "24px", marginTop: "16px"}}>
-            {/* 10. AQI CARD */}
+          {/* Right Column */}
+          <div style={{display: "flex", flexDirection: "column", gap: "24px"}}>
             <CompactAqi airQuality={airQuality} />
-
-            {/* 12. SUN & MOON */}
             <SunVisualizer 
               sunrise={conditions?.sunrise}
               sunset={conditions?.sunset}
               isDay={conditions?.is_day}
+              utcOffsetSeconds={conditions?.utc_offset_seconds}
+            />
+            <TodaySummary 
+              conditions={conditions}
+              dailyData={dailyForecast}
+              hourlyData={forecast}
             />
           </div>
+        </div>
+
+        {/* 5. FORECAST SECTION */}
+        <HourlyForecast forecast={forecast} />
+
+        {/* 6. 7 DAY FORECAST */}
+        <DailyForecast dailyData={dailyForecast} />
+
+        {/* 7. ANALYTICS GRID */}
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: "24px", alignItems: "start"}}>
+          <TrendAnalysis forecast={forecast} />
+          <AiPredictionTimeline forecast={forecast} />
+          <PredictionAccuracy advisoryData={advisoryData} />
         </div>
 
         {/* 11. RAG EVIDENCE & TRANSPARENCY */}
