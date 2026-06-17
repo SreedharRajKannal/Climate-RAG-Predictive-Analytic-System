@@ -16,15 +16,15 @@ export default function AiPredictionTimeline({ forecast }) {
     const rainDelta = future.precip_prob - current.precip_prob
     const humDelta = future.humidity - current.humidity
 
-    if (rainDelta > 30) return "Rain Probability Rising Sharply"
-    if (rainDelta > 10) return "Slight Rain Risk Emerging"
-    if (tempDelta > 3) return "Temperature Increasing Considerably"
-    if (tempDelta < -3) return "Significant Cooling Trend"
-    if (humDelta > 15) return "Humidity Increasing"
-    if (humDelta < -15) return "Air Becoming Drier"
-    if (future.wind_speed > 25 && future.wind_speed > current.wind_speed) return "Winds Picking Up"
+    if (rainDelta > 30) return "🌧 Rain Probability Rising Sharply"
+    if (rainDelta > 10) return "🌧 Slight Rain Risk Emerging"
+    if (tempDelta > 3) return "🌡 Temperature Increasing Considerably"
+    if (tempDelta < -3) return "🌡 Significant Cooling Trend"
+    if (humDelta > 15) return "💧 Humidity Increasing"
+    if (humDelta < -15) return "💨 Air Becoming Drier"
+    if (future.wind_speed > 25 && future.wind_speed > current.wind_speed) return "🌬 Winds Picking Up"
     
-    return "Conditions Stabilizing"
+    return "☁ Conditions Stabilizing"
   }
 
   const current = futureForecast[0]

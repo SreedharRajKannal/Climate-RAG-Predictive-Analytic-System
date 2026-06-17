@@ -15,7 +15,8 @@ export default function AiCommandCenter({ advisoryData }) {
     intensity,
     risk_level,
     confidence_score,
-    potential_impact
+    potential_impact,
+    reasoning_bullets = []
   } = advisoryData
 
   return (
@@ -26,6 +27,17 @@ export default function AiCommandCenter({ advisoryData }) {
       </div>
 
       <h2 className="ai-narrative">{summary}</h2>
+
+      {reasoning_bullets.length > 0 && (
+        <div style={{marginTop: "16px", marginBottom: "24px", background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-md)", borderLeft: "4px solid var(--c-primary)"}}>
+          <div style={{fontSize: "13px", fontWeight: "700", color: "var(--c-text-primary)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em"}}>Why this advisory?</div>
+          <div style={{display: "flex", flexDirection: "column", gap: "6px"}}>
+            {reasoning_bullets.map((bullet, idx) => (
+              <span key={idx} style={{fontSize: "14px", color: "var(--c-text-secondary)", lineHeight: "1.4"}}>• {bullet}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="ai-grid">
         <div className="ai-metric">

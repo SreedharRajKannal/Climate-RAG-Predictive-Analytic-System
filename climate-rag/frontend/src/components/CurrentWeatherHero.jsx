@@ -36,7 +36,24 @@ export default function CurrentWeatherHero({ conditions, dailyData, advisoryData
   const tzAbbr = conditions.timezone_abbreviation || "UTC"
   const offsetHours = conditions.utc_offset_seconds ? (conditions.utc_offset_seconds / 3600) : 0
   const offsetStr = offsetHours >= 0 ? `+${offsetHours}` : `${offsetHours}`
-  const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  
+  const now = new Date();
+  const localBrowserOffset = now.getTimezoneOffset() * 60000;
+  const targetCityTime = new Date(now.getTime() + localBrowserOffset + ((conditions.utc_offset_seconds || 0) * 1000));
+  
+  const localTimeStr = targetCityTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const myTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+  // Try to get user timezone abbreviation safely
+  let myTzAbbr = "";
+  try {
+    myTzAbbr = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).format(now).split(' ').pop();
+  } catch (e) {
+    myTzAbbr = "Local";
+  }
+  
+  const myOffsetHours = -(now.getTimezoneOffset() / 60);
+  const myOffsetStr = myOffsetHours >= 0 ? `+${myOffsetHours}` : `${myOffsetHours}`;
 
   return (
     <div className="card-base" style={{
@@ -50,25 +67,27 @@ export default function CurrentWeatherHero({ conditions, dailyData, advisoryData
     }}>
       
       {/* LEFT: LOCATION AND TIME */}
-      <div style={{display: "flex", flexDirection: "column", gap: "12px", minWidth: "250px"}}>
+      <div style={{display: "flex", flexDirection: "column", gap: "24px", minWidth: "250px"}}>
         <div style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>📍 {displayLoc}</div>
         
-        <div style={{
-          border: "1px solid var(--c-border)",
-          borderRadius: "var(--radius-sm)",
-          display: "inline-flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: "var(--c-surface)"
-        }}>
-          <div style={{padding: "8px 16px", borderBottom: "1px solid var(--c-border)", fontSize: "24px", fontWeight: "600", color: "var(--c-text-primary)"}}>
-             {localTimeStr}
+        <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px"}}>
+          <div>
+            <div style={{fontSize: "12px", color: "var(--c-text-secondary)", fontWeight: "600", marginBottom: "4px"}}>Local Time</div>
+            <div style={{fontSize: "16px", color: "var(--c-text-primary)", fontWeight: "700"}}>{localTimeStr}</div>
           </div>
-          <div style={{padding: "6px 16px", fontSize: "13px", color: "var(--c-text-secondary)", background: "var(--c-surface-hover)"}}>
-             {tzAbbr} UTC{offsetStr}
+          <div>
+            <div style={{fontSize: "12px", color: "var(--c-text-secondary)", fontWeight: "600", marginBottom: "4px"}}>Timezone</div>
+            <div style={{fontSize: "16px", color: "var(--c-text-primary)", fontWeight: "700"}}>{tzAbbr} <span style={{fontSize: "13px", fontWeight: "500", color: "var(--c-text-muted)"}}>(UTC{offsetStr})</span></div>
+          </div>
+          <div>
+            <div style={{fontSize: "12px", color: "var(--c-text-secondary)", fontWeight: "600", marginBottom: "4px"}}>My Time</div>
+            <div style={{fontSize: "16px", color: "var(--c-text-primary)", fontWeight: "700"}}>{myTimeStr} <span style={{fontSize: "13px", fontWeight: "500", color: "var(--c-text-muted)"}}>{myTzAbbr} (UTC{myOffsetStr})</span></div>
+          </div>
+          <div>
+            <div style={{fontSize: "12px", color: "var(--c-text-secondary)", fontWeight: "600", marginBottom: "4px"}}>Last Updated</div>
+            <div style={{fontSize: "16px", color: "var(--c-text-primary)", fontWeight: "700"}}>{localTimeStr} <span style={{fontSize: "13px", fontWeight: "500", color: "var(--c-text-muted)"}}>Local</span></div>
           </div>
         </div>
-        {lastUpdated && <div style={{fontSize: "12px", color: "var(--c-text-muted)"}}>Last Updated: {lastUpdated}</div>}
       </div>
 
       {/* RIGHT: WEATHER METRICS */}

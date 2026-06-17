@@ -536,7 +536,7 @@ body {
 }
 .daily-row {
   display: grid;
-  grid-template-columns: 40px 32px 1fr 40px 30px 100px 30px;
+  grid-template-columns: 80px 32px 1fr 40px 30px 100px 30px;
   align-items: center;
   gap: 12px;
   padding: 12px 0;

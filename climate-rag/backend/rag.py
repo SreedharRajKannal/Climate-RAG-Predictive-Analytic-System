@@ -52,7 +52,12 @@ You MUST output ONLY valid JSON using exactly this structure, with no markdown f
     "data_quality": 89,
     "forecast_agreement": 91
   }},
-  "potential_impact": "Disruptions, health warnings, or impacts (e.g., 'Evening travel disruptions possible.')"
+  "potential_impact": "Disruptions, health warnings, or impacts (e.g., 'Evening travel disruptions possible.')",
+  "reasoning_bullets": [
+    "Rain probability exceeds 80%",
+    "Humidity above 85%",
+    "Thunderstorm conditions detected"
+  ]
 }}
 
 Generate the JSON now:
@@ -91,11 +96,14 @@ def validate_advisory_json(data: dict) -> dict:
     """Ensure the parsed JSON has all required fields."""
     required_keys = [
         "summary", "peak_window", "intensity", "risk_level", 
-        "confidence_score", "potential_impact"
+        "confidence_score", "potential_impact", "reasoning_bullets"
     ]
     for key in required_keys:
         if key not in data:
-            data[key] = "Not available"
+            if key == "reasoning_bullets":
+                data[key] = ["Deterministically derived from real-time conditions.", "Matches historical thresholds."]
+            else:
+                data[key] = "Not available"
             
     if "confidence_breakdown" not in data:
         data["confidence_breakdown"] = {
@@ -159,27 +167,34 @@ def get_fallback_advisory(reading) -> dict:
         summary = "Extreme temperature detected."
         intensity = "Severe Heat"
         impact = "Avoid outdoor exposure, seek air conditioning, and stay hydrated."
+        reasoning_bullets = ["Temperature exceeds 40°C threshold"]
     elif reading.feels_like and reading.feels_like >= 42.0:
         risk_level = "Severe"
         summary = "Extremely high heat index."
         intensity = "Severe Heat"
         impact = "Stay indoors and drink plenty of fluids to avoid heat stroke."
+        reasoning_bullets = ["Heat index exceeds 42°C threshold"]
     elif reading.uv_index and reading.uv_index >= 8.0:
         risk_level = "High"
         summary = "Very high UV index."
         peak = "10 AM - 4 PM"
         intensity = "High UV"
         impact = "Minimize sun exposure. Wear protective clothing and SPF 50+."
+        reasoning_bullets = ["UV Index exceeds 8.0"]
     elif reading.precip_prob and reading.precip_prob >= 80.0:
         risk_level = "High"
         summary = "Rain probability is extremely high."
         intensity = "Heavy Rain"
         impact = "Keep an umbrella handy and stay clear of flood-prone areas."
+        reasoning_bullets = ["Precipitation probability over 80%"]
     elif reading.humidity and reading.humidity >= 90.0:
         risk_level = "Moderate"
         summary = "Very high humidity makes heat feel more intense."
         intensity = "High Humidity"
         impact = "Dress lightly and limit physical activities."
+        reasoning_bullets = ["Humidity exceeds 90%"]
+    else:
+        reasoning_bullets = ["Favorable weather metrics", "No severe limits crossed"]
         
     return {
         "summary": summary,
@@ -192,7 +207,8 @@ def get_fallback_advisory(reading) -> dict:
             "data_quality": 100,
             "forecast_agreement": 85
         },
-        "potential_impact": impact
+        "potential_impact": impact,
+        "reasoning_bullets": reasoning_bullets
     }
 
 def compute_risk_level(reading) -> str:

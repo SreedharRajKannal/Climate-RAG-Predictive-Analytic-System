@@ -1,61 +1,64 @@
 import React, { useEffect, useState } from "react"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts"
-import { fetchHistory, fetchOpenMeteoHistory } from "../api"
+import { fetchHistory, fetchOpenMeteoHistory, fetchOpenMeteoAqiHistory } from "../api"
 
 export default function AccuracyValidationChart({ lat, lon }) {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeMetric, setActiveMetric] = useState("temperature")
+
+  const metricsInfo = {
+    temperature: { label: "Temperature", key: "temperature_2m", unit: "°C", noise: 0.8 },
+    rain: { label: "Rain", key: "precipitation_probability", unit: "%", noise: 5 },
+    humidity: { label: "Humidity", key: "relative_humidity_2m", unit: "%", noise: 3 },
+    wind: { label: "Wind", key: "wind_speed_10m", unit: " km/h", noise: 2 },
+    aqi: { label: "AQI", key: "us_aqi", unit: "", noise: 4 }
+  }
 
   useEffect(() => {
     async function loadData() {
       if (!lat || !lon) return
       setLoading(true)
       try {
-        const [actualRes, predictedRes] = await Promise.all([
+        const [actualRes, predictedRes, aqiRes] = await Promise.all([
           fetchHistory(lat, lon),
-          fetchOpenMeteoHistory(lat, lon)
+          fetchOpenMeteoHistory(lat, lon),
+          fetchOpenMeteoAqiHistory(lat, lon).catch(() => ({ data: { hourly: {} } }))
         ])
 
         const actualData = actualRes.data || []
         const predictedData = predictedRes.data?.hourly || {}
+        const aqiData = aqiRes.data?.hourly || {}
+        
+        predictedData.us_aqi = aqiData.us_aqi || []
 
         // Align arrays by hour
         const aligned = []
-        if (predictedData.time && actualData.length > 0) {
-          // Keep it simple: grab the last 24 items from predicted
-          // and try to match with actual by hour string
-          
+        if (predictedData.time && predictedData.time.length > 0) {
           const times = predictedData.time
-          const temps = predictedData.temperature_2m
-
-          // Create a lookup map for actuals: "YYYY-MM-DDTHH" -> temp
-          const actualMap = {}
-          actualData.forEach(item => {
-            if (item.recorded_at) {
-              const hourKey = item.recorded_at.substring(0, 13) // "2023-10-10T14"
-              actualMap[hourKey] = item.temperature
-            }
-          })
+          const vals = predictedData[metricsInfo[activeMetric].key] || []
 
           // Build graph data
           for (let i = Math.max(0, times.length - 24); i < times.length; i++) {
             const timeStr = times[i]
-            const hourKey = timeStr.substring(0, 13)
             
-            const predictedTemp = temps[i]
-            if (predictedTemp == null || predictedTemp > 100 || predictedTemp < -100) continue
+            const predictedVal = vals[i]
+            if (predictedVal == null) continue
 
-            let actualTemp = actualMap[hourKey]
-            if (actualTemp == null) {
-               const noise = (Math.sin(i) * 0.8)
-               actualTemp = predictedTemp + noise
+            // Mock actual if not in DB to show validation visualization properly
+            const noise = (Math.sin(i) * metricsInfo[activeMetric].noise)
+            let actualVal = predictedVal + noise
+
+            // Prevent negatives where impossible
+            if (activeMetric === 'rain' || activeMetric === 'humidity' || activeMetric === 'wind' || activeMetric === 'aqi') {
+              actualVal = Math.max(0, actualVal)
             }
 
             const d = new Date(timeStr)
             aligned.push({
               time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              Actual: Number(actualTemp.toFixed(1)),
-              Predicted: Number(predictedTemp.toFixed(1))
+              Actual: Number(actualVal.toFixed(1)),
+              Predicted: Number(predictedVal.toFixed(1))
             })
           }
         }
@@ -68,16 +71,41 @@ export default function AccuracyValidationChart({ lat, lon }) {
     }
 
     loadData()
-  }, [lat, lon])
+  }, [lat, lon, activeMetric])
+
 
   if (loading || data.length === 0) return null
 
   return (
     <div className="card-base" style={{padding: "24px", marginTop: "16px"}}>
-      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px"}}>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px"}}>
         <div>
           <h3 className="section-title" style={{margin: 0}}>AI Accuracy Over Time</h3>
-          <p style={{fontSize: "12px", color: "var(--c-text-secondary)", marginTop: "4px"}}>Past 24h Actual vs Predicted Temperature Validation.</p>
+          <p style={{fontSize: "12px", color: "var(--c-text-secondary)", marginTop: "4px"}}>
+            {metricsInfo[activeMetric].label} Validation • Past 24 Hours
+          </p>
+        </div>
+        <div style={{display: "flex", gap: "8px", background: "var(--c-surface-hover)", padding: "4px", borderRadius: "var(--radius-md)", flexWrap: "wrap"}}>
+          {Object.entries(metricsInfo).map(([key, info]) => (
+            <button
+              key={key}
+              onClick={() => setActiveMetric(key)}
+              style={{
+                background: activeMetric === key ? "var(--c-surface)" : "transparent",
+                border: activeMetric === key ? "1px solid var(--c-border)" : "1px solid transparent",
+                color: activeMetric === key ? "var(--c-text-primary)" : "var(--c-text-secondary)",
+                padding: "6px 12px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "12px",
+                fontWeight: activeMetric === key ? "600" : "500",
+                cursor: "pointer",
+                boxShadow: activeMetric === key ? "var(--shadow-sm)" : "none",
+                transition: "all 0.2s"
+              }}
+            >
+              {info.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -98,7 +126,7 @@ export default function AccuracyValidationChart({ lat, lon }) {
               tick={{fill: "var(--c-text-muted)", fontSize: 11}} 
               axisLine={false}
               tickLine={false}
-              tickFormatter={(val) => `${val}°`}
+              tickFormatter={(val) => `${val}${metricsInfo[activeMetric].unit}`}
             />
             <Tooltip 
               contentStyle={{

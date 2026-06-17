@@ -22,6 +22,7 @@ import AiPredictionTimeline from "./components/AiPredictionTimeline"
 import CurrentWeatherHero from "./components/CurrentWeatherHero"
 import HourlyForecast from "./components/HourlyForecast"
 import AccuracyValidationChart from "./components/AccuracyValidationChart"
+import BestWindow from "./components/BestWindow"
 
 export default function App() {
   const [theme, setTheme] = useState("dark")
@@ -136,6 +137,7 @@ export default function App() {
           {/* Left Column */}
           <div style={{display: "flex", flexDirection: "column"}}>
             <ActionCenter conditions={conditions} advisoryData={advisoryData} />
+            <BestWindow hourlyData={forecast} />
           </div>
           
           {/* Right Column */}
@@ -155,18 +157,20 @@ export default function App() {
           </div>
         </div>
 
-        {/* 5. FORECAST SECTION */}
+        {/* 5. TREND ANALYSIS (FULL WIDTH) */}
+        <TrendAnalysis forecast={forecast} />
+
+        {/* 6. WEATHER INTELLIGENCE TIMELINE */}
+        <AiPredictionTimeline forecast={forecast} />
+
+        {/* 7. 24 HOUR FORECAST */}
         <HourlyForecast forecast={forecast} />
 
-        {/* 6. 7 DAY FORECAST */}
-        <DailyForecast dailyData={dailyForecast} />
+        {/* 8. FORECAST CONFIDENCE */}
+        <PredictionAccuracy advisoryData={advisoryData} />
 
-        {/* 7. ANALYTICS GRID */}
-        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: "24px", alignItems: "start"}}>
-          <TrendAnalysis forecast={forecast} />
-          <AiPredictionTimeline forecast={forecast} />
-          <PredictionAccuracy advisoryData={advisoryData} />
-        </div>
+        {/* 9. 7 DAY FORECAST */}
+        <DailyForecast dailyData={dailyForecast} />
 
         {/* 11. RAG EVIDENCE & TRANSPARENCY */}
         <RagTimeline retrievedChunks={retrievedChunks} />
