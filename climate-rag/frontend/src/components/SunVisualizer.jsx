@@ -1,26 +1,26 @@
 import React, { useEffect, useState } from "react"
 
 // Ensure dates are parsed to a unified day baseline for time comparison
-const calculateDaylightProgress = (sunriseStr, sunsetStr, currentStr) => {
-  const parseTime = (str) => {
-    // Handle both "06:04 AM" and "6:04 AM" safely
-    const parts = str.trim().split(' ');
-    if (parts.length < 2) return 0;
-    const time = parts[0];
-    const modifier = parts[1].toUpperCase();
-    
-    let [hours, minutes] = time.split(':').map(Number);
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-    return hours * 60 + minutes; // returns minutes from midnight
+const calculateDaylightProgress = (sunriseStr, sunsetStr, currentCityTime) => {
+  // sunriseStr: "2024-10-10T06:04"
+  // sunsetStr: "2024-10-10T18:41"
+  const parseHourMin = (str) => {
+    if (!str || str.length < 16) return 0;
+    const timePart = str.split('T')[1];
+    if (!timePart) return 0;
+    const [hours, minutes] = timePart.split(':').map(Number);
+    return hours * 60 + minutes;
   };
 
-  const sunrise = parseTime(sunriseStr);
-  const sunset = parseTime(sunsetStr);
-  const current = parseTime(currentStr);   
+  const sunrise = parseHourMin(sunriseStr);
+  const sunset = parseHourMin(sunsetStr);
+  
+  const nowH = currentCityTime.getHours();
+  const nowM = currentCityTime.getMinutes();
+  const current = nowH * 60 + nowM;
 
   if (current < sunrise || current > sunset) {
-    return { pct: 0, remHours: 0, remMins: 0 };
+    return { pct: 0, remHours: 0, remMins: 0, isDaylight: false };
   }
 
   const totalDaylight = sunset - sunrise;
@@ -31,7 +31,7 @@ const calculateDaylightProgress = (sunriseStr, sunsetStr, currentStr) => {
   const remHours = Math.floor(remaining / 60);
   const remMins = remaining % 60;
 
-  return { pct, remHours, remMins };
+  return { pct, remHours, remMins, isDaylight: true };
 };
 
 export default function SunVisualizer({ sunrise, sunset, isDay = 1, utcOffsetSeconds = 0 }) {
@@ -54,20 +54,36 @@ export default function SunVisualizer({ sunrise, sunset, isDay = 1, utcOffsetSec
 
   const sRise = new Date(sunrise)
   const sSet = new Date(sunset)
-  const sunriseStr = formatTimeStr(sRise)
-  const sunsetStr = formatTimeStr(sSet)
-  const nowStr = formatTimeStr(targetCityTime)
+  
+  // Format target city strings by using local time trick, but wait, the ISO string has local time already embedded in the YYYY-MM-DDTHH:MM
+  const parseIsoToTimeStr = (iso) => {
+    if (!iso) return "";
+    const timePart = iso.split('T')[1];
+    if (!timePart) return "";
+    let [h, m] = timePart.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12;
+    return `${h < 10 ? '0'+h : h}:${m < 10 ? '0'+m : m} ${ampm}`;
+  }
+
+  const sunriseLabel = parseIsoToTimeStr(sunrise);
+  const sunsetLabel = parseIsoToTimeStr(sunset);
 
   if (isDay === 1) {
-    const { pct, remHours, remMins } = calculateDaylightProgress(sunriseStr, sunsetStr, nowStr);
+    const { pct, remHours, remMins, isDaylight } = calculateDaylightProgress(sunrise, sunset, targetCityTime);
 
     return (
       <div className="card-base" style={{padding: "24px", display: "flex", flexDirection: "column", height: "100%"}}>
         <h3 className="section-title" style={{marginBottom: "24px"}}>☀️ Sun Tracker</h3>
         
         <div style={{display: "flex", flexDirection: "column", justifyContent: "center", flex: 1}}>
+          <div style={{textAlign: "center", marginBottom: "8px", fontSize: "14px", fontWeight: "700", color: "var(--c-text-primary)"}}>
+            ☀️ {isDaylight ? `${Math.round(pct)}% Through Daylight` : "Daylight Ended"}
+          </div>
+
           <div style={{display: "flex", alignItems: "center", gap: "12px", width: "100%", marginBottom: "24px"}}>
-            <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)", whiteSpace: "nowrap"}}>{sunriseStr}</span>
+            <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)", whiteSpace: "nowrap"}}>{sunriseLabel}</span>
             
             <div style={{flex: 1, height: "2px", background: "var(--c-border)", position: "relative", display: "flex", alignItems: "center"}}>
                <div style={{
@@ -85,21 +101,26 @@ export default function SunVisualizer({ sunrise, sunset, isDay = 1, utcOffsetSec
                  filter: "drop-shadow(0 0 4px rgba(245, 158, 11, 0.4))",
                  zIndex: 10
                }}>
-                 ☀️
+                 ●
                </div>
             </div>
 
-            <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)", whiteSpace: "nowrap"}}>{sunsetStr}</span>
+            <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)", whiteSpace: "nowrap"}}>{sunsetLabel}</span>
           </div>
 
-          <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid #fbbf24"}}>
-             <div style={{fontSize: "16px", fontWeight: "700", color: "var(--c-text-primary)", marginBottom: "8px"}}>
-               {Math.round(pct)}% Through Daylight
-             </div>
-             <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
-               Remaining: <span style={{fontWeight: "600", color: "var(--c-text-primary)"}}>{remHours}h {remMins}m</span>
-             </div>
-          </div>
+          {isDaylight ? (
+            <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid #fbbf24"}}>
+              <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
+                Remaining Daylight: <span style={{fontWeight: "600", color: "var(--c-text-primary)"}}>{remHours}h {remMins}m</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--c-border)"}}>
+              <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
+                Waiting for sunrise.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -110,28 +131,18 @@ export default function SunVisualizer({ sunrise, sunset, isDay = 1, utcOffsetSec
       nextSunrise.setDate(nextSunrise.getDate() + 1)
     }
 
-    const remainingMs = Math.max(0, nextSunrise - targetCityTime)
-    const remHours = Math.floor(remainingMs / (1000 * 60 * 60))
-    const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
-
     return (
       <div className="card-base" style={{padding: "24px", display: "flex", flexDirection: "column", height: "100%"}}>
-        <h3 className="section-title" style={{marginBottom: "24px"}}>🌅 Next Sunrise</h3>
-        
-        <div style={{display: "flex", flexDirection: "column", justifyContent: "center", flex: 1}}>
-          <div style={{fontSize: "36px", fontWeight: "800", color: "var(--c-text-primary)", marginBottom: "24px", textAlign: "center"}}>
-            {formatTimeStr(nextSunrise)}
+        <h3 className="section-title" style={{marginBottom: "24px"}}>🌙 Next Sunrise</h3>
+        <div style={{display: "flex", flexDirection: "column", justifyContent: "center", flex: 1, gap: "16px"}}>
+          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+            <span style={{fontSize: "14px", color: "var(--c-text-secondary)"}}>Sunrise</span>
+            <span style={{fontSize: "18px", fontWeight: "700", color: "var(--c-text-primary)"}}>{sunriseLabel}</span>
           </div>
-
-          <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid #8b5cf6"}}>
-            <div style={{display: "flex", justifyContent: "space-between", marginBottom: "8px"}}>
-              <span style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>Current Time:</span>
-              <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)"}}>{nowStr}</span>
-            </div>
-            <div style={{display: "flex", justifyContent: "space-between"}}>
-              <span style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>Time Until Sunrise:</span>
-              <span style={{fontSize: "13px", fontWeight: "600", color: "var(--c-text-primary)"}}>{remHours}h {remMins}m</span>
-            </div>
+          <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--c-primary)"}}>
+             <div style={{fontSize: "13px", color: "var(--c-text-secondary)"}}>
+               Current Time: <span style={{fontWeight: "600", color: "var(--c-text-primary)"}}>{targetCityTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+             </div>
           </div>
         </div>
       </div>

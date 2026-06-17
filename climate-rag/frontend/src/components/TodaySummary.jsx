@@ -1,7 +1,7 @@
 import React from "react"
 
 export default function TodaySummary({ conditions, dailyData, hourlyData }) {
-  if (!conditions || !dailyData || dailyData.length === 0 || !hourlyData) return null
+  if (!conditions || !dailyData || dailyData.length === 0 || !hourlyData || hourlyData.length === 0) return null
 
   const today = dailyData[0]
   const high = today.temp_max != null ? Math.round(today.temp_max) : "—"
@@ -33,15 +33,27 @@ export default function TodaySummary({ conditions, dailyData, hourlyData }) {
     let score = - (avgRain * 2) - (tempDiff * 3) - (avgUv * 5)
     if (isDaylight) score += 20
 
-    if (score > bestScore) {
-      bestScore = score
-      bestWindow = { start: i, end: i + 3, avgRain, avgTemp, avgUv, isDaylight }
-    }
     if (score < worstScore) {
       worstScore = score
       worstWindow = { start: i, end: i + 3, avgRain, avgTemp, avgUv, isDaylight }
     }
   }
+
+  // Find Peak Feels Like
+  const peakFeelsLike = todayHourly.reduce((max, h) => Math.max(max, h.apparent_temperature || h.temperature || 0), 0)
+  
+  // Find Strongest Wind
+  const strongestWind = todayHourly.reduce((max, h) => Math.max(max, h.wind_speed || 0), 0)
+
+  // Find Wettest Hour
+  let wettestHourObj = todayHourly[0]
+  for (let h of todayHourly) {
+    if ((h.precip_prob || 0) > (wettestHourObj.precip_prob || 0)) {
+      wettestHourObj = h
+    }
+  }
+  const wettestHourDate = new Date(wettestHourObj.time)
+  const wettestHourStr = wettestHourDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
   const formatHour = (offset) => {
     const d = new Date()
@@ -54,12 +66,7 @@ export default function TodaySummary({ conditions, dailyData, hourlyData }) {
     return `${formatHour(win.start)} – ${formatHour(win.end)}`
   }
 
-  const getBestReason = (win) => {
-    if (!win) return "Data unavailable."
-    if (win.avgRain === 0) return "Zero rain risk and comfortable temperatures."
-    if (win.avgRain < 20) return "Lowest rain risk and manageable conditions."
-    return "Most optimal available timeframe today."
-  }
+
 
   const getWorstReason = (win) => {
     if (!win) return "Data unavailable."
@@ -75,35 +82,24 @@ export default function TodaySummary({ conditions, dailyData, hourlyData }) {
       
       <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px"}}>
         <div style={{display: "flex", flexDirection: "column"}}>
-          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>High</span>
-          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{high}°C</span>
+          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Feels Like Peak</span>
+          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{Math.round(peakFeelsLike)}°C</span>
         </div>
         <div style={{display: "flex", flexDirection: "column"}}>
-          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Low</span>
-          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{low}°C</span>
+          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Strongest Wind</span>
+          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{Math.round(strongestWind)} km/h</span>
+        </div>
+        <div style={{display: "flex", flexDirection: "column"}}>
+          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Wettest Hour</span>
+          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{(wettestHourObj.precip_prob || 0) > 0 ? wettestHourStr : "None"}</span>
         </div>
         <div style={{display: "flex", flexDirection: "column"}}>
           <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Rain Chance</span>
           <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{Math.round(peakRain)}%</span>
         </div>
-        <div style={{display: "flex", flexDirection: "column"}}>
-          <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "600"}}>Peak UV</span>
-          <span style={{fontSize: "20px", fontWeight: "700", color: "var(--c-text-primary)"}}>{Math.round(peakUv)}</span>
-        </div>
       </div>
 
       <div style={{flex: 1, display: "flex", flexDirection: "column", gap: "16px"}}>
-        <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--c-success)"}}>
-          <div style={{fontSize: "14px", fontWeight: "700", color: "var(--c-text-primary)", marginBottom: "4px"}}>
-            Best Outdoor Window
-          </div>
-          <div style={{fontSize: "16px", fontWeight: "600", color: "var(--c-success)", marginBottom: "8px"}}>
-            {formatWindowStr(bestWindow)}
-          </div>
-          <div style={{fontSize: "12px", color: "var(--c-text-secondary)"}}>
-            <strong style={{color: "var(--c-text-primary)"}}>Reason:</strong> {getBestReason(bestWindow)}
-          </div>
-        </div>
 
         <div style={{background: "var(--c-surface-hover)", padding: "16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--c-danger)"}}>
           <div style={{fontSize: "14px", fontWeight: "700", color: "var(--c-text-primary)", marginBottom: "4px"}}>

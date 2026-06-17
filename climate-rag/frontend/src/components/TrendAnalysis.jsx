@@ -25,7 +25,7 @@ export default function TrendAnalysis({ forecast }) {
       hum: f.humidity,
       rain: f.precip_prob,
       wind: f.wind_speed,
-      pressure: f.surface_pressure
+      aqi: f.aqi || 0
     })
   }
 
@@ -34,14 +34,14 @@ export default function TrendAnalysis({ forecast }) {
     { id: "hum", label: "Humidity", color: "var(--c-accent)", dataKey: "hum", unit: "%" },
     { id: "rain", label: "Rain", color: "var(--c-success)", dataKey: "rain", unit: "%" },
     { id: "wind", label: "Wind", color: "var(--c-warning)", dataKey: "wind", unit: "km/h" },
-    { id: "pressure", label: "Pressure", color: "var(--c-danger)", dataKey: "pressure", unit: "hPa" }
+    { id: "aqi", label: "AQI", color: "var(--c-danger)", dataKey: "aqi", unit: " AQI" }
   ]
 
   const activeTabData = tabs.find(t => t.id === activeTab)
 
   return (
-    <div className="card-base" style={{padding: "24px", marginTop: "16px"}}>
-      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px"}}>
+    <div className="card-base" style={{padding: "32px", marginTop: "24px"}}>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px"}}>
         <h3 className="section-title" style={{margin: 0}}>Trend Analysis</h3>
         <div style={{display: "flex", gap: "8px", background: "var(--c-surface-hover)", padding: "4px", borderRadius: "var(--radius-md)"}}>
           {tabs.map(tab => (
@@ -67,26 +67,28 @@ export default function TrendAnalysis({ forecast }) {
         </div>
       </div>
 
-      <div style={{width: "100%", height: "250px"}}>
+      <div style={{width: "100%", height: "350px"}}>
         <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id={`grad-${activeTab}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={activeTabData.color} stopOpacity={0.3}/>
+                <stop offset="5%" stopColor={activeTabData.color} stopOpacity={0.4}/>
                 <stop offset="95%" stopColor={activeTabData.color} stopOpacity={0}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--c-border)" vertical={false} />
             <XAxis 
               dataKey="time" 
-              tick={{fill: "var(--c-text-muted)", fontSize: 11}} 
-              tickMargin={10}
+              tick={{fill: "var(--c-text-muted)", fontSize: 13, fontWeight: "500"}} 
+              tickMargin={16}
               axisLine={false}
               tickLine={false}
-              minTickGap={30}
+              minTickGap={40}
             />
             <YAxis 
-              tick={{fill: "var(--c-text-muted)", fontSize: 11}} 
+              domain={['auto', 'auto']}
+              tick={{fill: "var(--c-text-muted)", fontSize: 13, fontWeight: "500"}} 
+              tickMargin={16}
               axisLine={false}
               tickLine={false}
               tickFormatter={(val) => `${val}${activeTabData.unit === 'km/h' ? '' : activeTabData.unit}`}

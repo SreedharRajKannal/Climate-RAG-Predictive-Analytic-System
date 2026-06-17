@@ -173,6 +173,10 @@ def get_forecast(lat: float = None, lon: float = None):
         is_days = hourly.get("is_day", [])
         pressures = hourly.get("surface_pressure", [])
         
+        from openmeteo_client import get_air_quality
+        air_quality_data = get_air_quality(latitude, longitude)
+        hourly_aqi = air_quality_data.get("hourly_aqi", [])
+
         forecast_data = []
         for i in range(len(times)):
             forecast_data.append({
@@ -184,6 +188,7 @@ def get_forecast(lat: float = None, lon: float = None):
                 "weather_code": wcodes[i] if i < len(wcodes) else 0,
                 "is_day": is_days[i] if i < len(is_days) else 1,
                 "surface_pressure": pressures[i] if i < len(pressures) else None,
+                "aqi": hourly_aqi[i] if i < len(hourly_aqi) else None,
             })
                 
         return forecast_data

@@ -224,13 +224,17 @@ def get_air_quality(lat: float, lon: float) -> Dict[str, Any]:
         "latitude": f"{lat:.4f}",
         "longitude": f"{lon:.4f}",
         "current": [
-            "european_aqi",
+            "us_aqi",
             "pm2_5",
             "pm10",
             "carbon_monoxide",
             "nitrogen_dioxide",
             "ozone",
         ],
+        "hourly": ["us_aqi"],
+        "timezone": "auto",
+        "past_hours": 48,
+        "forecast_days": 7,
     }
     
     attempt = 0
@@ -242,12 +246,13 @@ def get_air_quality(lat: float, lon: float) -> Dict[str, Any]:
             current = data.get("current", {})
             
             result = {
-                "european_aqi": current.get("european_aqi"),
+                "us_aqi": current.get("us_aqi"),
                 "pm2_5": current.get("pm2_5"),
                 "pm10": current.get("pm10"),
                 "co": current.get("carbon_monoxide"),
                 "no2": current.get("nitrogen_dioxide"),
                 "o3": current.get("ozone"),
+                "hourly_aqi": data.get("hourly", {}).get("us_aqi", [])
             }
             
             cache[key] = {"timestamp": time.time(), "data": result}

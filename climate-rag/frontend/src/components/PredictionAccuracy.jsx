@@ -8,7 +8,7 @@ export default function PredictionAccuracy({ advisoryData }) {
     { label: "Rain", val: Math.max(0, baseConf - 3) },
     { label: "Wind", val: Math.max(0, baseConf - 7) },
     { label: "Humidity", val: Math.max(0, baseConf - 5) },
-    { label: "Pressure", val: Math.min(100, baseConf + 1) }
+    { label: "AQI", val: Math.min(100, baseConf + 1) }
   ]
 
   return (
