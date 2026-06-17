@@ -1,32 +1,92 @@
-const SEVERITY_STYLES = {
-  Informational: "bg-green-50  border-green-400  text-green-800",
-  Caution:       "bg-yellow-50 border-yellow-400 text-yellow-800",
-  Warning:       "bg-orange-50 border-orange-400 text-orange-800",
-  Critical:      "bg-red-50    border-red-500    text-red-800",
-}
+import React, { useState } from "react"
 
-const SEVERITY_BADGE = {
-  Informational: "bg-green-100  text-green-700",
-  Caution:       "bg-yellow-100 text-yellow-700",
-  Warning:       "bg-orange-100 text-orange-700",
-  Critical:      "bg-red-100    text-red-700",
-}
+export default function AdvisoryPanel({ advisoryText, source, retrievedChunks, conditions }) {
+  const [showSources, setShowSources] = useState(false)
 
-export default function AdvisoryPanel({ advisory, severity }) {
-  if (!advisory) return null
+  // Generate action chips based on conditions
+  const generateActionChips = () => {
+    if (!conditions) return []
+    const chips = []
+    const temp = conditions.temperature ?? 25
+    const wind = conditions.wind_speed ?? 10
+    const rain = conditions.precip_prob ?? 0
+    const uv = conditions.uv_index ?? 3
+    const aqi = conditions.aqi ?? 50
 
-  const box   = SEVERITY_STYLES[severity] ?? SEVERITY_STYLES.Informational
-  const badge = SEVERITY_BADGE[severity]  ?? SEVERITY_BADGE.Informational
+    if (temp >= 15 && temp <= 28 && wind < 20 && rain < 10) {
+      chips.push({ icon: "✓", text: "Great day for outdoor activities", type: "positive" })
+    }
+    if (rain > 50) {
+      chips.push({ icon: "⚠", text: "Carry an umbrella today", type: "warning" })
+    }
+    if (uv > 6) {
+      chips.push({ icon: "⚠", text: "UV peaks at noon, wear sunscreen", type: "warning" })
+    }
+    if (aqi < 100) {
+      chips.push({ icon: "✓", text: "Air quality suitable for exercise", type: "positive" })
+    } else if (aqi >= 100) {
+      chips.push({ icon: "⚠", text: "Limit prolonged outdoor exertion", type: "warning" })
+    }
+    if (temp > 25 && wind < 25 && rain < 10) {
+      chips.push({ icon: "✓", text: "Beach conditions are good", type: "positive" })
+    }
+    
+    // Deduplicate and limit to 4
+    return chips.slice(0, 4)
+  }
+
+  const chips = generateActionChips()
+  
+  const sourceLabel = source === "alert_engine" ? "Rule Engine" : "RAG · Llama3"
+  const sourceColor = source === "alert_engine" ? "#EF4444" : "#8B5CF6"
 
   return (
-    <div className={`rounded-xl border-l-4 p-5 ${box}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge}`}>
-          {severity}
+    <div className="insights-card">
+      <div className="section-header">
+        <h3 className="section-title">Smart Insights</h3>
+        <span className="insight-source" style={{color: sourceColor, backgroundColor: `${sourceColor}15`, border: `1px solid ${sourceColor}30`}}>
+          {sourceLabel}
         </span>
-        <span className="text-xs text-gray-400">Latest advisory</span>
       </div>
-      <p className="text-sm leading-relaxed">{advisory}</p>
+
+      <div className="insight-body">
+        <p className="insight-text">{advisoryText || "Loading insights..."}</p>
+        
+        {chips.length > 0 && (
+          <div className="action-center">
+            <h4 className="action-center-title">Today's Recommendations</h4>
+            <div className="action-chips">
+              {chips.map((chip, i) => (
+                <div key={i} className={`action-chip action-chip-${chip.type}`}>
+                  <span className="action-chip-icon">{chip.icon}</span>
+                  <span className="action-chip-text">{chip.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {retrievedChunks && retrievedChunks.length > 0 && (
+          <div className="sources-toggle-wrap">
+            <button className="sources-toggle" onClick={() => setShowSources(!showSources)}>
+              {showSources ? "Hide Sources" : "View Sources"}
+            </button>
+            {showSources && (
+              <div className="sources-list">
+                {retrievedChunks.map((chunk, idx) => (
+                  <div key={idx} className="source-item">
+                    <span className="source-badge">
+                      📄 {chunk.filename || `Chunk ${idx + 1}`}
+                      {chunk.similarity && ` · ${(chunk.similarity * 100).toFixed(1)}%`}
+                    </span>
+                    <p className="source-text">{chunk.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -5,36 +5,41 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from database import SessionLocal, WeatherReading
 from alerts import check_alerts
 
-LAT = os.getenv("LOCATION_LAT", "9.9312")
-LON = os.getenv("LOCATION_LON", "76.2673")
+LAT = "8.5241"
+LON = "76.9366"
+CITY = "Trivandrum"
+
+def set_location(lat: float, lon: float, name: str):
+    global LAT, LON, CITY
+    LAT = f"{lat:.4f}"
+    LON = f"{lon:.4f}"
+    CITY = name
+    fetch_and_store()
 
 def fetch_and_store():
     try:
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": LAT,
-            "longitude": LON,
-            "current": [
-                "temperature_2m",
-                "apparent_temperature",
-                "relative_humidity_2m",
-                "surface_pressure",
-                "wind_speed_10m",
-                "wind_direction_10m",
-                "uv_index",
-                "precipitation_probability",
-                "cloud_cover"
-            ],
-            "timezone": "auto"
-        }
+        # Use the zero‑dependency client to fetch current weather and cache it.
+        from openmeteo_client import get_current_weather, get_location_metadata
+        lat = float(LAT)
+        lon = float(LON)
+        data = get_current_weather(lat, lon)
 
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()["current"]
+        # Fetch sunrise/sunset via the same wrapper
+        sunrise, sunset, _, _, _ = get_location_metadata(lat, lon)
+        # AQI fetch remains unchanged – external service may still fail.
+        aqi_val = None
+        try:
+            aqi_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+            aqi_params = {"latitude": LAT, "longitude": LON, "current": "us_aqi"}
+            aqi_res = requests.get(aqi_url, params=aqi_params, timeout=5)
+            aqi_res.raise_for_status()
+            aqi_val = aqi_res.json()["current"]["us_aqi"]
+        except Exception as e:
+            print(f"AQI fetch error: {e}")
 
         reading = WeatherReading(
             recorded_at = datetime.utcnow(),
-            location    = f"{LAT},{LON}",
+            location    = f"{CITY} ({LAT},{LON})",
             temperature = data.get("temperature_2m"),
             feels_like  = data.get("apparent_temperature"),
             humidity    = data.get("relative_humidity_2m"),
@@ -43,17 +48,17 @@ def fetch_and_store():
             wind_dir    = data.get("wind_direction_10m"),
             uv_index    = data.get("uv_index"),
             precip_prob = data.get("precipitation_probability"),
-            cloud_cover = data.get("cloud_cover")
+            cloud_cover = data.get("cloud_cover"),
+            aqi         = aqi_val
         )
 
         db = SessionLocal()
         db.add(reading)
         db.commit()
+        check_alerts(reading)
         db.close()
 
-        check_alerts(reading)
         print(f"[{datetime.utcnow()}] Reading stored: {data.get('temperature_2m')}°C")
-
     except Exception as e:
         print(f"Fetch error: {e}")
 
