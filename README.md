@@ -35,7 +35,14 @@ The application is built on a four-layer architecture, fully containerized via D
 ## ⚙️ Prerequisites
 
 ### General
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running 
+- Python 3.11+
+- Node.js 18+ (npm included)
+- Docker Desktop
+- Git recommended ( If you are cloning the repo)
+- Any code editor (Recommended VScode)
+- Minimum 8GB RAM recommended (Ollama + Docker + React dev server together are heavy)
+- Minimum 5GB free disk space (Llama3 model weights are ~4.1GB)
 
 ### For Windows ( Nvidia GPU)
 
