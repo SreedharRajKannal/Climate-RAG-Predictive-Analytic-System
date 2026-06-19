@@ -60,8 +60,15 @@ LOCATION_LAT=9.9312   # Default latitude (e.g., Kochi)
 LOCATION_LON=76.2673  # Default longitude
 OLLAMA_MODEL=llama3
 ```
+### 2. Build the Frontend
 
-### 2. Boot the Stack
+You should run the command below to completely build the frontend otherwise the app will crash. Navigate to inside the frontend folder and run this
+
+```bash
+npm install
+```
+
+### 3. Boot the Stack
 
 Start the entire infrastructure (database, API, frontend, Ollama) using Docker Compose:
 
@@ -69,7 +76,7 @@ Start the entire infrastructure (database, API, frontend, Ollama) using Docker C
 docker compose up -d --build
 ```
 
-### 3. Access the Application
+### 4. Access the Application
 
 Once the containers are healthy, the system is accessible at:
 
