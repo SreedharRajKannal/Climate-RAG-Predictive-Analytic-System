@@ -34,15 +34,53 @@ The application is built on a four-layer architecture, fully containerized via D
 
 ## ⚙️ Prerequisites
 
-Before running the application, make sure you have:
-
+### General
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
 
-Ollama runs as a containerized service as part of this stack, so no separate local installation is required. After the containers start, pull the model into the running Ollama container:
+### For Windows ( Nvidia GPU)
+
+If you are currently on windows with a GPU then you should change everything after the Ollama: in the docker-compose.yml file located in the root
+Before running the application, make sure you have:
 
 ```bash
-docker exec -it climate_ollama ollama pull llama3
+ollama:
+  image: ollama/ollama:latest
+  container_name: climate_ollama
+  restart: always
+  ports:
+    - "11434:11434"
+  volumes:
+    - ollama_data:/root/.ollama
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
 ```
+
+Make sure Docker Desktop is using WSL 2 backend
+Open Docker Desktop → Settings → General → confirm "Use the WSL 2 based engine" is checked. If it's not, enable it and restart Docker Desktop.
+
+### For Linux ( Nvidia GPU)
+
+Step 1 — Install the toolkit
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+```
+
+Step 2 — Configure Docker to use it
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+Step 3 — Update docker-compose.yml ollama service (as shown earlier — add the deploy block with GPU reservation)
 
 ---
 
@@ -75,7 +113,11 @@ Start the entire infrastructure (database, API, frontend, Ollama) using Docker C
 ```bash
 docker compose up -d --build
 ```
+Ollama runs as a containerized service as part of this stack, so no separate local installation is required. For testing purpose the mode is tinyllama. After the containers start, pull the model into the running Ollama container:
 
+```bash
+docker exec -it climate_ollama ollama pull llama3
+```
 ### 4. Access the Application
 
 Once the containers are healthy, the system is accessible at:
