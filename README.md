@@ -62,7 +62,7 @@ OLLAMA_MODEL=llama3
 ```
 ### 2. Build the Frontend
 
-You should run the command below to completly build the frontend otherwise the app will crash. Navigate to inside the frontend folder and run this
+You should run the command below to completely build the frontend otherwise the app will crash. Navigate to inside the frontend folder and run this
 
 ```bash
 npm install
