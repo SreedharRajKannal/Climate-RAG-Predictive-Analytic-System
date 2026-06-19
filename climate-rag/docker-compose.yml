@@ -16,20 +16,26 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   ollama:
-    image: ollama/ollama
-    container_name: climate_ollama
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
+  image: ollama/ollama:latest
+  container_name: climate_ollama
+  restart: always
+  ports:
+    - "11434:11434"
+  volumes:
+    - ollama_data:/root/.ollama
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [ gpu ]
   api:
     build: ./backend
     container_name: climate_api
