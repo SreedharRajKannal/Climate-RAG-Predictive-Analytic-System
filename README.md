@@ -43,7 +43,7 @@ The application is built on a four-layer architecture, fully containerized via D
 - Minimum 8GB RAM recommended (Ollama + Docker + React dev server together are heavy)
 - Minimum 5GB free disk space (Llama3 model weights are ~4.1GB)
 
-### For Windows ( Nvidia GPU)
+### 🪟 For Windows ( Nvidia GPU)
 
 If you are currently on windows with a GPU then you should change everything after the Ollama: in the docker-compose.yml file located in the root
 Before running the application, make sure you have:
@@ -69,7 +69,7 @@ ollama:
 Make sure Docker Desktop is using WSL 2 backend
 Open Docker Desktop → Settings → General → confirm "Use the WSL 2 based engine" is checked. If it's not, enable it and restart Docker Desktop.
 
-### For Linux ( Nvidia GPU)
+### 🐧 For Linux ( Nvidia GPU)
 
 Step 1 — Install the toolkit
 ```bash
