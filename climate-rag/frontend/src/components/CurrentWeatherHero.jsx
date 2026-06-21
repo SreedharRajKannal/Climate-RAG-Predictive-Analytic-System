@@ -7,7 +7,33 @@ export default function CurrentWeatherHero({ conditions, dailyData, advisoryData
   const temp = conditions.temperature != null ? Math.round(conditions.temperature) : "—"
   const feelsLike = conditions.feels_like != null ? Math.round(conditions.feels_like) : "—"
   const code = conditions.weather_code ?? 0
-  const isDay = conditions.is_day ?? 1
+
+  // Compute actual isDay from sunrise/sunset instead of trusting API flag
+  const computeIsDay = () => {
+    const sunrise = conditions.sunrise;
+    const sunset = conditions.sunset;
+    if (!sunrise || !sunset) return conditions.is_day ?? 1;
+
+    const parseHourMin = (str) => {
+      if (!str || str.length < 16) return 0;
+      const timePart = str.split('T')[1];
+      if (!timePart) return 0;
+      const [h, m] = timePart.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const sunriseMin = parseHourMin(sunrise);
+    const sunsetMin = parseHourMin(sunset);
+
+    const now = new Date();
+    const localBrowserOffset = now.getTimezoneOffset() * 60000;
+    const targetCityTime = new Date(now.getTime() + localBrowserOffset + ((conditions.utc_offset_seconds || 0) * 1000));
+    const currentMin = targetCityTime.getHours() * 60 + targetCityTime.getMinutes();
+
+    return (currentMin >= sunriseMin && currentMin <= sunsetMin) ? 1 : 0;
+  };
+
+  const isDay = computeIsDay();
   
   let high = "—"
   let low = "—"
