@@ -111,6 +111,7 @@ You should run the command below to completely build the frontend otherwise the 
 
 ```bash
 npm install
+npm run build 
 ```
 
 ### 3. Boot the Stack
