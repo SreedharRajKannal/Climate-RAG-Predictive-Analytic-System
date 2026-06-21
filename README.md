@@ -36,9 +36,8 @@ The application is built on a four-layer architecture, fully containerized via D
 
 ### General
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running 
-- Python 3.11+
-- Node.js 18+ (npm included)
-- Docker Desktop
+- [Python 3.11+](https://www.python.org/downloads/)
+- [Node.js 18+](https://nodejs.org/en/download)
 - Git recommended ( If you are cloning the repo)
 - Any code editor (Recommended VScode)
 - Minimum 8GB RAM recommended (Ollama + Docker + React dev server together are heavy)
@@ -121,11 +120,13 @@ Start the entire infrastructure (database, API, frontend, Ollama) using Docker C
 ```bash
 docker compose up -d --build
 ```
-Ollama runs as a containerized service as part of this stack, so no separate local installation is required. For testing purpose the mode is tinyllama. After the containers start, pull the model into the running Ollama container:
+Ollama runs as a containerized service as part of this stack, so no separate local installation is required. For testing purpose the current model is tinyllama. Select a model that can run easily on your computer(find the perfect model by googling 'ollama models that I can run on cpu/gpu(if avaliable)' ). After the containers start, pull the model into the running Ollama container:
 
 ```bash
-docker exec -it climate_ollama ollama pull llama3
+docker exec -it climate_ollama ollama pull llama3 #you can change the llama3 to the model you want
 ```
+
+
 ### 4. Access the Application
 
 Once the containers are healthy, the system is accessible at:
@@ -147,7 +148,7 @@ Once the containers are healthy, the system is accessible at:
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── components/  # React UI components (Bento-box layout)
+│   │   ├── components/  # React UI components 
 │   │   ├── api.js       # Axios HTTP client configuration
 │   │   └── App.jsx      # Main dashboard view
 │   ├── package.json
