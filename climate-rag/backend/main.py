@@ -293,6 +293,29 @@ def get_alert():
     }
 
 
+# ── CLUSTERING ENDPOINTS ──────────────────────────────────
+
+from clustering import get_cluster_results, get_elbow_results, get_scatter_data
+
+@app.get("/clusters")
+def get_clusters(k: int = None):
+    """Return K-means cluster assignments, centers, and labels."""
+    return get_cluster_results(n_clusters=k)
+
+@app.get("/clusters/elbow")
+def get_clusters_elbow():
+    """Return inertia values for K=1..10 to render the elbow chart."""
+    return get_elbow_results()
+
+@app.get("/clusters/scatter")
+def get_clusters_scatter(sample: int = None):
+    """
+    Return scatter-plot-ready data with cluster assignments.
+    Use ?sample=500 to randomly sample rows for faster rendering.
+    """
+    return get_scatter_data(sample=sample)
+
+
 # ── WEBSOCKET ─────────────────────────────────────────────
 
 @app.websocket("/ws")

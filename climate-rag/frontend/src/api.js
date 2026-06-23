@@ -39,3 +39,12 @@ export const fetchOpenMeteoAqiHistory = (lat, lon) =>
 
 export const fetchOpenMeteoForecast = (lat, lon) => 
   axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,weather_code,apparent_temperature&timezone=auto&forecast_days=2`)
+
+export const fetchClusters = (k) => 
+  axios.get(`${BASE}/clusters`, { params: k ? { k } : {} })
+
+export const fetchElbow = () => 
+  axios.get(`${BASE}/clusters/elbow`)
+
+export const fetchClusterScatter = (sample) => 
+  axios.get(`${BASE}/clusters/scatter`, { params: sample ? { sample } : {} })

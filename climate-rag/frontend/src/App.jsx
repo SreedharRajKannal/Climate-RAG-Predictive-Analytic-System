@@ -23,6 +23,7 @@ import CurrentWeatherHero from "./components/CurrentWeatherHero"
 import HourlyForecast from "./components/HourlyForecast"
 import AccuracyValidationChart from "./components/AccuracyValidationChart"
 import BestWindow from "./components/BestWindow"
+import WeatherClusters from "./components/WeatherClusters"
 
 export default function App() {
   const [theme, setTheme] = useState("dark")
@@ -177,6 +178,9 @@ export default function App() {
 
         {/* AI Accuracy Validation (Trust builder) */}
         <AccuracyValidationChart lat={coords.lat} lon={coords.lon} />
+
+        {/* 12. WEATHER PATTERN CLUSTERS (K-Means) */}
+        <WeatherClusters />
 
       </main>
 
