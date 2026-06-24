@@ -48,3 +48,6 @@ export const fetchElbow = () =>
 
 export const fetchClusterScatter = (sample) => 
   axios.get(`${BASE}/clusters/scatter`, { params: sample ? { sample } : {} })
+
+export const fetchCurrentCluster = () => 
+  axios.get(`${BASE}/clusters/current`)

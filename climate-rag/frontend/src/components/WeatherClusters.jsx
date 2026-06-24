@@ -1,33 +1,50 @@
 import React, { useEffect, useState } from "react"
 import {
   ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, LineChart, Line, Cell, Legend
+  CartesianGrid, LineChart, Line, Cell
 } from "recharts"
-import { fetchClusterScatter, fetchElbow } from "../api"
+import { fetchClusterScatter, fetchElbow, fetchCurrentCluster } from "../api"
 
 const CLUSTER_COLORS = [
   "#6366f1", "#f59e0b", "#10b981", "#ef4444",
   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"
 ]
 
+// Custom diamond shape for the "current reading" marker
+const DiamondDot = (props) => {
+  const { cx, cy } = props
+  if (!cx || !cy) return null
+  return (
+    <polygon
+      points={`${cx},${cy-10} ${cx+8},${cy} ${cx},${cy+10} ${cx-8},${cy}`}
+      fill="#ffffff"
+      stroke="#ffffff"
+      strokeWidth={2}
+      filter="drop-shadow(0 0 6px rgba(255,255,255,0.8))"
+    />
+  )
+}
+
 export default function WeatherClusters() {
   const [activeTab, setActiveTab] = useState("scatter")
   const [scatterData, setScatterData] = useState(null)
   const [elbowData, setElbowData] = useState([])
+  const [currentCluster, setCurrentCluster] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [xAxis, setXAxis] = useState("temperature")
   const [yAxis, setYAxis] = useState("humidity")
 
   const featureOptions = [
-    { key: "temperature", label: "Temperature (°C)" },
+    { key: "temperature", label: "Temperature (\u00b0C)" },
     { key: "humidity", label: "Humidity (%)" },
     { key: "precipitation", label: "Precipitation (mm)" },
     { key: "wind_speed", label: "Wind Speed (km/h)" },
     { key: "uv_index", label: "UV Index" },
-    { key: "apparent_temperature", label: "Feels Like (°C)" },
+    { key: "apparent_temperature", label: "Feels Like (\u00b0C)" },
   ]
 
+  // Load scatter + elbow data on mount
   useEffect(() => {
     async function load() {
       setLoading(true)
@@ -47,6 +64,21 @@ export default function WeatherClusters() {
       }
     }
     load()
+  }, [])
+
+  // Load current cluster on mount and every 15 minutes
+  useEffect(() => {
+    async function loadCurrent() {
+      try {
+        const res = await fetchCurrentCluster()
+        setCurrentCluster(res.data)
+      } catch (err) {
+        console.error("Failed to load current cluster", err)
+      }
+    }
+    loadCurrent()
+    const interval = setInterval(loadCurrent, 15 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [])
 
   if (loading) {
@@ -71,6 +103,20 @@ export default function WeatherClusters() {
   const clusters = scatterData.clusters || []
   const points = scatterData.points || []
 
+  // Build current reading point for the scatter chart
+  const currentPoint = currentCluster ? {
+    [xAxis]: currentCluster.conditions?.[xAxis] ?? currentCluster.conditions?.temperature ?? 0,
+    [yAxis]: currentCluster.conditions?.[yAxis] ?? currentCluster.conditions?.humidity ?? 0,
+    cluster: currentCluster.cluster_id,
+    isCurrent: true,
+    temperature: currentCluster.conditions?.temperature,
+    humidity: currentCluster.conditions?.humidity,
+    precipitation: currentCluster.conditions?.precip_prob,
+    wind_speed: currentCluster.conditions?.wind_speed,
+    uv_index: currentCluster.conditions?.uv_index,
+    apparent_temperature: currentCluster.conditions?.apparent_temperature,
+  } : null
+
   const tabs = [
     { id: "scatter", label: "Cluster Scatter" },
     { id: "elbow", label: "Elbow Method" },
@@ -90,10 +136,15 @@ export default function WeatherClusters() {
         boxShadow: "var(--shadow-lg)",
         fontSize: "12px"
       }}>
+        {d.isCurrent && (
+          <div style={{fontWeight: "700", color: "#ffffff", marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px"}}>
+            Current Reading
+          </div>
+        )}
         <div style={{fontWeight: "700", color: CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length], marginBottom: "6px"}}>
           {cluster?.label || `Cluster ${d.cluster}`}
         </div>
-        <div style={{color: "var(--c-text-secondary)"}}>Temp: {d.temperature}°C</div>
+        <div style={{color: "var(--c-text-secondary)"}}>Temp: {d.temperature}\u00b0C</div>
         <div style={{color: "var(--c-text-secondary)"}}>Humidity: {d.humidity}%</div>
         <div style={{color: "var(--c-text-secondary)"}}>Precip: {d.precipitation} mm</div>
         <div style={{color: "var(--c-text-secondary)"}}>Wind: {d.wind_speed} km/h</div>
@@ -144,14 +195,46 @@ export default function WeatherClusters() {
     </div>
   )
 
+  const activeClusterId = currentCluster?.cluster_id
+
   return (
     <div className="card-base" style={{padding: "32px", marginTop: "24px"}}>
+
+      {/* CURRENT CLUSTER BANNER */}
+      {currentCluster && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "16px",
+          padding: "16px 20px",
+          marginBottom: "24px",
+          background: "var(--c-surface-hover)",
+          borderRadius: "var(--radius-md)",
+          borderLeft: `4px solid ${CLUSTER_COLORS[currentCluster.cluster_id % CLUSTER_COLORS.length]}`
+        }}>
+          <div style={{
+            padding: "4px 14px",
+            borderRadius: "var(--radius-full)",
+            background: CLUSTER_COLORS[currentCluster.cluster_id % CLUSTER_COLORS.length],
+            color: "#fff",
+            fontSize: "13px",
+            fontWeight: "700",
+            whiteSpace: "nowrap"
+          }}>
+            {currentCluster.cluster_label}
+          </div>
+          <div style={{fontSize: "14px", color: "var(--c-text-secondary)", lineHeight: "1.4"}}>
+            {currentCluster.description}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px"}}>
         <div>
           <h3 className="section-title" style={{margin: 0}}>Weather Pattern Clusters</h3>
           <p style={{fontSize: "12px", color: "var(--c-text-secondary)", marginTop: "4px"}}>
-            K-Means Clustering • {scatterData.n_clusters} Patterns Identified • {points.length} Data Points
+            K-Means Clustering \u2022 {scatterData.n_clusters} Patterns Identified \u2022 {points.length} Data Points
           </p>
         </div>
         <div style={{display: "flex", gap: "8px", background: "var(--c-surface-hover)", padding: "4px", borderRadius: "var(--radius-md)"}}>
@@ -178,19 +261,35 @@ export default function WeatherClusters() {
         </div>
       </div>
 
-      {/* Cluster Legend */}
-      <div style={{display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "24px"}}>
-        {clusters.map((c, i) => (
-          <div key={c.id} style={{display: "flex", alignItems: "center", gap: "8px"}}>
-            <div style={{
-              width: "12px", height: "12px", borderRadius: "50%",
-              background: CLUSTER_COLORS[i % CLUSTER_COLORS.length]
-            }} />
-            <span style={{fontSize: "13px", color: "var(--c-text-secondary)", fontWeight: "500"}}>
-              {c.label} ({c.count})
-            </span>
+      {/* Cluster Legend — active cluster is bold/underlined */}
+      <div style={{display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "24px", alignItems: "center"}}>
+        {clusters.map((c, i) => {
+          const isActive = c.id === activeClusterId
+          return (
+            <div key={c.id} style={{display: "flex", alignItems: "center", gap: "8px"}}>
+              <div style={{
+                width: "12px", height: "12px", borderRadius: "50%",
+                background: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
+                boxShadow: isActive ? `0 0 8px ${CLUSTER_COLORS[i % CLUSTER_COLORS.length]}` : "none"
+              }} />
+              <span style={{
+                fontSize: "13px",
+                color: isActive ? "var(--c-text-primary)" : "var(--c-text-secondary)",
+                fontWeight: isActive ? "700" : "500",
+                textDecoration: isActive ? "underline" : "none",
+                textUnderlineOffset: "3px"
+              }}>
+                {c.label} ({c.count}){isActive ? " \u25c6" : ""}
+              </span>
+            </div>
+          )
+        })}
+        {currentPoint && (
+          <div style={{display: "flex", alignItems: "center", gap: "8px", marginLeft: "8px"}}>
+            <div style={{width: "12px", height: "12px", background: "#ffffff", transform: "rotate(45deg)"}} />
+            <span style={{fontSize: "13px", color: "var(--c-text-muted)", fontWeight: "500"}}>Current</span>
           </div>
-        ))}
+        )}
       </div>
 
       {/* SCATTER TAB */}
@@ -221,16 +320,25 @@ export default function WeatherClusters() {
                   tickLine={false}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Historical data points */}
                 <Scatter data={points} fill="#8884d8">
                   {points.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={CLUSTER_COLORS[entry.cluster % CLUSTER_COLORS.length]}
-                      fillOpacity={0.6}
-                      r={4}
+                      fillOpacity={0.5}
+                      r={3}
                     />
                   ))}
                 </Scatter>
+                {/* Current reading as white diamond */}
+                {currentPoint && (
+                  <Scatter
+                    data={[currentPoint]}
+                    shape={<DiamondDot />}
+                    fill="#ffffff"
+                  />
+                )}
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -295,28 +403,43 @@ export default function WeatherClusters() {
               </tr>
             </thead>
             <tbody>
-              {clusters.map((c, i) => (
-                <tr key={c.id} style={{borderBottom: "1px solid var(--c-border)", transition: "background 0.2s"}}
-                    onMouseEnter={e => e.currentTarget.style.background = "var(--c-surface-hover)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <td style={{padding: "12px 16px"}}>
-                    <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
-                      <div style={{
-                        width: "10px", height: "10px", borderRadius: "50%",
-                        background: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
-                        flexShrink: 0
-                      }} />
-                      <span style={{fontWeight: "600", color: "var(--c-text-primary)"}}>{c.label}</span>
-                    </div>
-                  </td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)", fontWeight: "600"}}>{c.count}</td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.temperature}°C</td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.humidity}%</td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.precipitation} mm</td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.wind_speed} km/h</td>
-                  <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.uv_index}</td>
-                </tr>
-              ))}
+              {clusters.map((c, i) => {
+                const isActive = c.id === activeClusterId
+                return (
+                  <tr key={c.id}
+                    style={{
+                      borderBottom: "1px solid var(--c-border)",
+                      transition: "background 0.2s",
+                      background: isActive ? "rgba(99, 102, 241, 0.08)" : "transparent"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = isActive ? "rgba(99, 102, 241, 0.12)" : "var(--c-surface-hover)"}
+                    onMouseLeave={e => e.currentTarget.style.background = isActive ? "rgba(99, 102, 241, 0.08)" : "transparent"}>
+                    <td style={{padding: "12px 16px"}}>
+                      <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
+                        <div style={{
+                          width: "10px", height: "10px", borderRadius: "50%",
+                          background: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
+                          flexShrink: 0
+                        }} />
+                        <span style={{
+                          fontWeight: isActive ? "700" : "600",
+                          color: "var(--c-text-primary)",
+                          textDecoration: isActive ? "underline" : "none",
+                          textUnderlineOffset: "3px"
+                        }}>
+                          {c.label} {isActive ? "\u25c6" : ""}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)", fontWeight: "600"}}>{c.count}</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.temperature}\u00b0C</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.humidity}%</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.precipitation} mm</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.wind_speed} km/h</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.uv_index}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

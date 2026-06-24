@@ -2,21 +2,30 @@
 clustering.py — K-Means clustering engine for historical weather data.
 
 Provides:
-- Elbow method to find optimal K
-- K-Means fitting with auto-labeling
+- Fixed 4-cluster K-Means fitting with auto-labeling
+- Model persistence via joblib
+- Elbow method for visualization
 - Cluster summary statistics
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
+import joblib
 import os
 import sys
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 sys.path.append(os.path.dirname(__file__))
 from database import SessionLocal, HistoricalReading
 
+# Fixed number of clusters
+N_CLUSTERS = 4
+
+# Model persistence paths — /app/ inside Docker, local dir outside Docker
+MODEL_DIR = "/app" if os.path.isdir("/app") else os.path.dirname(__file__)
+KMEANS_MODEL_PATH = os.path.join(MODEL_DIR, "kmeans_model.pkl")
+SCALER_MODEL_PATH = os.path.join(MODEL_DIR, "kmeans_scaler.pkl")
 
 # Features used for clustering — chosen for maximum discriminative power
 CLUSTER_FEATURES = [
@@ -76,77 +85,43 @@ def run_elbow_method(df: pd.DataFrame, k_range: range = range(1, 11)) -> list:
     return inertia_values
 
 
-def find_optimal_k(inertia_values: list) -> int:
-    """
-    Use the elbow heuristic: find the K where the rate of decrease
-    in inertia slows down the most (maximum second derivative).
-    """
-    if len(inertia_values) < 3:
-        return 4  # sensible default for weather data
-
-    inertias = [v["inertia"] for v in inertia_values]
-
-    # Compute second differences (discrete second derivative)
-    diffs = [inertias[i] - inertias[i + 1] for i in range(len(inertias) - 1)]
-    second_diffs = [diffs[i] - diffs[i + 1] for i in range(len(diffs) - 1)]
-
-    # The optimal K is where the second derivative is maximized
-    # Add 2 because second_diffs starts at index 0 which corresponds to K=3
-    optimal_idx = int(np.argmax(second_diffs)) + 2  # +2 because K starts at 1
-    optimal_k = inertia_values[optimal_idx]["k"] if optimal_idx < len(inertia_values) else 4
-
-    return max(2, min(optimal_k, 8))  # Clamp between 2 and 8
-
-
 def label_cluster(center: dict) -> str:
     """
     Generate a human-readable label for a cluster based on its centroid values.
     Uses meteorological heuristics for Trivandrum-like tropical climates.
+    Designed for 4 clusters.
     """
     temp = center.get("temperature", 25)
     humidity = center.get("humidity", 70)
     precip = center.get("precipitation", 0)
     wind = center.get("wind_speed", 5)
     uv = center.get("uv_index", 5)
+    apparent = center.get("apparent_temperature", temp)
 
-    # Monsoon: high rain + high humidity
-    if precip > 2.0 and humidity > 80:
-        return "Monsoon Peak"
+    # Heavy monsoon: very high rain + high humidity
+    if precip > 2.0 and humidity > 85:
+        return "Heavy Monsoon"
 
-    # Pre-monsoon heat: high temp + high UV + low rain
-    if temp > 30 and uv > 7 and precip < 0.5:
+    # Pre-monsoon heat: high temp + low humidity (dry heat)
+    if temp > 30 and humidity < 70:
         return "Pre-Monsoon Heat"
 
-    # Hot and humid: high temp + high humidity + low rain
-    if temp > 28 and humidity > 75 and precip < 1.0:
-        return "Hot & Humid"
+    # Monsoon peak: moderate-high temp + high humidity + some precip
+    if temp > 27 and humidity > 75 and precip > 0.1:
+        return "Monsoon Peak"
 
-    # Overcast/mild: moderate temp + high cloud cover (inferred via low UV)
-    if uv < 3 and temp < 28:
-        return "Mild Overcast"
-
-    # Windy period
-    if wind > 15:
-        return "Windy Period"
-
-    # Cool night: low temp + low UV
-    if temp < 25 and uv < 1:
-        return "Cool Night"
-
-    # Dry warm: moderate everything
-    if precip < 0.3 and temp > 26:
-        return "Dry & Warm"
-
-    return "Transitional"
+    # Mild overcast: cooler temp, high humidity, low precip
+    return "Mild Overcast"
 
 
-def run_kmeans(df: pd.DataFrame, n_clusters: int = None) -> dict:
+def run_kmeans(df: pd.DataFrame) -> dict:
     """
-    Run K-Means clustering on the historical data.
-    
+    Run K-Means clustering on the historical data with fixed K=4.
+    Saves fitted model and scaler to disk via joblib.
+
     Returns:
         {
-            "n_clusters": int,
+            "n_clusters": 4,
             "clusters": [{"label": str, "center": dict, "count": int, "stats": dict}],
             "points": [{"recorded_at": str, "cluster": int, ...features}],
         }
@@ -155,16 +130,17 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int = None) -> dict:
     if X.empty:
         return {"n_clusters": 0, "clusters": [], "points": []}
 
-    # Find optimal K if not specified
-    if n_clusters is None:
-        elbow = run_elbow_method(df)
-        n_clusters = find_optimal_k(elbow)
-
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    km = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    km = KMeans(n_clusters=N_CLUSTERS, random_state=42, n_init=10)
     labels = km.fit_predict(X_scaled)
+
+    # Save fitted models to disk for prediction without re-fitting
+    joblib.dump(km, KMEANS_MODEL_PATH)
+    joblib.dump(scaler, SCALER_MODEL_PATH)
+    print(f"[clustering] Saved KMeans model to {KMEANS_MODEL_PATH}")
+    print(f"[clustering] Saved StandardScaler to {SCALER_MODEL_PATH}")
 
     # Inverse-transform centers back to original scale
     centers_scaled = km.cluster_centers_
@@ -176,7 +152,7 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int = None) -> dict:
     df_valid["cluster"] = labels
 
     clusters = []
-    for i in range(n_clusters):
+    for i in range(N_CLUSTERS):
         cluster_df = df_valid[df_valid["cluster"] == i]
         center = {feat: round(float(centers_original[i][j]), 2) for j, feat in enumerate(CLUSTER_FEATURES)}
 
@@ -211,36 +187,57 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int = None) -> dict:
         points.append(point)
 
     return {
-        "n_clusters": n_clusters,
+        "n_clusters": N_CLUSTERS,
         "clusters": clusters,
         "points": points,
     }
 
 
-def get_cluster_results(n_clusters: int = None) -> dict:
-    """High-level function: load data → cluster → return results."""
+def load_saved_models():
+    """Load previously saved KMeans model and scaler from disk. Returns (km, scaler) or (None, None)."""
+    if not os.path.exists(KMEANS_MODEL_PATH) or not os.path.exists(SCALER_MODEL_PATH):
+        return None, None
+    try:
+        km = joblib.load(KMEANS_MODEL_PATH)
+        scaler = joblib.load(SCALER_MODEL_PATH)
+        return km, scaler
+    except Exception as e:
+        print(f"[clustering] Failed to load saved models: {e}")
+        return None, None
+
+
+def get_cluster_labels() -> dict:
+    """Get a mapping of cluster_id -> label. Requires running get_cluster_results first."""
+    results = get_cluster_results()
+    if "error" in results:
+        return {}
+    return {c["id"]: c["label"] for c in results.get("clusters", [])}
+
+
+def get_cluster_results() -> dict:
+    """High-level function: load data -> cluster -> return results."""
     df = load_historical_data()
     if df.empty:
         return {"error": "No historical data found. Run historical_fetch.py first."}
-    return run_kmeans(df, n_clusters)
+    return run_kmeans(df)
 
 
 def get_elbow_results() -> list:
-    """High-level function: load data → run elbow → return inertia values."""
+    """High-level function: load data -> run elbow -> return inertia values."""
     df = load_historical_data()
     if df.empty:
         return []
     return run_elbow_method(df)
 
 
-def get_scatter_data(sample: int = None) -> list:
+def get_scatter_data(sample: int = None) -> dict:
     """
     Get scatter-plot-ready data points.
     Optionally randomly samples to keep the frontend fast for large datasets.
     """
     results = get_cluster_results()
     if "error" in results:
-        return []
+        return {}
 
     points = results["points"]
 
