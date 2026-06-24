@@ -51,3 +51,6 @@ export const fetchClusterScatter = (sample) =>
 
 export const fetchCurrentCluster = () => 
   axios.get(`${BASE}/clusters/current`)
+
+export const fetchClusterDescriptions = () => 
+  axios.get(`${BASE}/clusters/descriptions`)

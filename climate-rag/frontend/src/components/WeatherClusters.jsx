@@ -3,7 +3,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, LineChart, Line, Cell
 } from "recharts"
-import { fetchClusterScatter, fetchElbow, fetchCurrentCluster } from "../api"
+import { fetchClusterScatter, fetchElbow, fetchCurrentCluster, fetchClusterDescriptions } from "../api"
 
 const CLUSTER_COLORS = [
   "#6366f1", "#f59e0b", "#10b981", "#ef4444",
@@ -30,6 +30,8 @@ export default function WeatherClusters() {
   const [scatterData, setScatterData] = useState(null)
   const [elbowData, setElbowData] = useState([])
   const [currentCluster, setCurrentCluster] = useState(null)
+  const [clusterDescs, setClusterDescs] = useState(null)
+  const [descsLoading, setDescsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [xAxis, setXAxis] = useState("temperature")
@@ -79,6 +81,22 @@ export default function WeatherClusters() {
     loadCurrent()
     const interval = setInterval(loadCurrent, 15 * 60 * 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Load cluster descriptions on mount
+  useEffect(() => {
+    async function loadDescs() {
+      setDescsLoading(true)
+      try {
+        const res = await fetchClusterDescriptions()
+        setClusterDescs(res.data?.descriptions || [])
+      } catch (err) {
+        console.error("Failed to load cluster descriptions", err)
+      } finally {
+        setDescsLoading(false)
+      }
+    }
+    loadDescs()
   }, [])
 
   if (loading) {
@@ -228,6 +246,71 @@ export default function WeatherClusters() {
           </div>
         </div>
       )}
+
+      {/* CLUSTER DESCRIPTIONS 2x2 GRID */}
+      {descsLoading ? (
+        <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px"}}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{
+              padding: "20px",
+              background: "var(--c-surface-hover)",
+              borderRadius: "var(--radius-md)",
+              borderLeft: "4px solid var(--c-border)",
+              minHeight: "80px",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }}>
+              <div style={{width: "120px", height: "14px", background: "var(--c-border)", borderRadius: "4px", marginBottom: "12px"}} />
+              <div style={{width: "100%", height: "12px", background: "var(--c-border)", borderRadius: "4px", marginBottom: "8px"}} />
+              <div style={{width: "80%", height: "12px", background: "var(--c-border)", borderRadius: "4px"}} />
+            </div>
+          ))}
+          <style>{`@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }`}</style>
+        </div>
+      ) : clusterDescs && clusterDescs.length > 0 ? (
+        <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px"}}>
+          {clusterDescs.map((desc, i) => {
+            const isActive = desc.cluster_id === activeClusterId
+            const color = CLUSTER_COLORS[desc.cluster_id % CLUSTER_COLORS.length]
+            return (
+              <div key={desc.cluster_id} style={{
+                padding: "20px",
+                background: isActive ? `${color}11` : "var(--c-surface-hover)",
+                borderRadius: "var(--radius-md)",
+                borderLeft: `4px solid ${color}`,
+                boxShadow: isActive ? `0 0 20px ${color}22, inset 0 0 20px ${color}08` : "none",
+                transition: "all 0.3s ease"
+              }}>
+                <div style={{
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  color: color,
+                  marginBottom: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}>
+                  {desc.cluster_label}
+                  {isActive && (
+                    <span style={{
+                      fontSize: "10px",
+                      fontWeight: "600",
+                      padding: "2px 8px",
+                      borderRadius: "var(--radius-full)",
+                      background: color,
+                      color: "#fff",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px"
+                    }}>NOW</span>
+                  )}
+                </div>
+                <div style={{fontSize: "13px", color: "var(--c-text-secondary)", lineHeight: "1.5"}}>
+                  {desc.description}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
 
       {/* Header */}
       <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px"}}>
