@@ -9,3 +9,7 @@ langchain-community
 chromadb
 sentence-transformers
 python-dotenv
+scikit-learn
+pandas
+numpy
+joblib

@@ -293,6 +293,117 @@ def get_alert():
     }
 
 
+# ── CLUSTERING ENDPOINTS ──────────────────────────────────
+
+from clustering import get_cluster_results, get_elbow_results, get_scatter_data, load_saved_models, get_cluster_labels, CLUSTER_FEATURES
+import numpy as np
+
+# Load saved models at startup (None if not yet fitted)
+_kmeans_model, _kmeans_scaler = load_saved_models()
+
+@app.get("/clusters")
+def get_clusters(k: int = None):
+    """Return K-means cluster assignments, centers, and labels."""
+    global _kmeans_model, _kmeans_scaler
+    result = get_cluster_results()
+    # Refresh cached models after fitting
+    _kmeans_model, _kmeans_scaler = load_saved_models()
+    return result
+
+@app.get("/clusters/elbow")
+def get_clusters_elbow():
+    """Return inertia values for K=1..10 to render the elbow chart."""
+    return get_elbow_results()
+
+@app.get("/clusters/scatter")
+def get_clusters_scatter(sample: int = None):
+    """
+    Return scatter-plot-ready data with cluster assignments.
+    Use ?sample=500 to randomly sample rows for faster rendering.
+    """
+    return get_scatter_data(sample=sample)
+
+@app.get("/clusters/current")
+def get_current_cluster():
+    """
+    Predict which cluster the current weather belongs to.
+    Uses the saved KMeans model + scaler. Calls Ollama for a one-line description.
+    """
+    global _kmeans_model, _kmeans_scaler
+
+    # Try loading models if not cached
+    if _kmeans_model is None or _kmeans_scaler is None:
+        _kmeans_model, _kmeans_scaler = load_saved_models()
+
+    if _kmeans_model is None or _kmeans_scaler is None:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Run historical_fetch.py first"}
+        )
+
+    # Get latest weather reading
+    db = SessionLocal()
+    reading = db.query(WeatherReading).order_by(WeatherReading.recorded_at.desc()).first()
+    db.close()
+
+    if not reading:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"error": "No weather data available"})
+
+    # Extract features in the exact order the scaler/model expect
+    temp = reading.temperature or 0
+    humidity = reading.humidity or 0
+    precip = reading.precip_prob or 0  # weather_readings uses precip_prob, not precipitation
+    wind = reading.wind_speed or 0
+    uv = reading.uv_index or 0
+    apparent = reading.feels_like or temp
+
+    features = np.array([[temp, humidity, precip, wind, uv, apparent]])
+    scaled = _kmeans_scaler.transform(features)
+    cluster_id = int(_kmeans_model.predict(scaled)[0])
+
+    # Get cluster label
+    labels = get_cluster_labels()
+    cluster_label = labels.get(cluster_id, f"Cluster {cluster_id}")
+
+    # Call Ollama for a one-line description
+    description = ""
+    try:
+        from langchain_community.llms import Ollama
+        import os
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        ollama_model = os.getenv("OLLAMA_MODEL", "llama3")
+        llm = Ollama(model=ollama_model, base_url=ollama_host, temperature=0.1)
+
+        prompt = (
+            f"Current weather in Trivandrum belongs to the '{cluster_label}' weather pattern.\n"
+            f"Conditions: Temperature {temp}\u00b0C, Humidity {humidity}%, "
+            f"Rain probability {precip}%, Wind {wind} km/h.\n\n"
+            f"Write exactly one sentence telling the user what weather pattern they are "
+            f"currently in and what it means for their day. "
+            f"Under 20 words. Direct. No fluff."
+        )
+        description = llm.invoke(prompt).strip()
+    except Exception as e:
+        print(f"[clusters/current] Ollama call failed: {e}")
+        description = f"Currently in {cluster_label} pattern."
+
+    return {
+        "cluster_id": cluster_id,
+        "cluster_label": cluster_label,
+        "description": description,
+        "conditions": {
+            "temperature": temp,
+            "humidity": humidity,
+            "wind_speed": wind,
+            "uv_index": uv,
+            "apparent_temperature": apparent,
+            "precip_prob": precip,
+        }
+    }
+
+
 # ── WEBSOCKET ─────────────────────────────────────────────
 
 @app.websocket("/ws")
