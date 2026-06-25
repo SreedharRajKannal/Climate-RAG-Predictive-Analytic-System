@@ -3,8 +3,11 @@ import {
   ResponsiveContainer, CartesianGrid, LineChart, Line,
   XAxis, YAxis, Tooltip
 } from "recharts"
-import Plot from "react-plotly.js"
+import Plotly from "plotly.js-dist-min"
+import createPlotlyComponent from "react-plotly.js/factory"
 import { fetchClusterScatter, fetchElbow, fetchCurrentCluster, fetchClusterDescriptions, fetchPCA } from "../api"
+
+const Plot = createPlotlyComponent(Plotly)
 
 const CLUSTER_COLORS = [
   "#6366f1", "#f59e0b", "#10b981", "#ef4444",
