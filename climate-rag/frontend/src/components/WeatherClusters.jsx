@@ -1,29 +1,15 @@
 import React, { useEffect, useState } from "react"
 import {
-  ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, LineChart, Line, Cell
+  ResponsiveContainer, CartesianGrid, LineChart, Line,
+  XAxis, YAxis, Tooltip
 } from "recharts"
-import { fetchClusterScatter, fetchElbow, fetchCurrentCluster, fetchClusterDescriptions } from "../api"
+import Plot from "react-plotly.js"
+import { fetchClusterScatter, fetchElbow, fetchCurrentCluster, fetchClusterDescriptions, fetchPCA } from "../api"
 
 const CLUSTER_COLORS = [
   "#6366f1", "#f59e0b", "#10b981", "#ef4444",
   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"
 ]
-
-// Custom diamond shape for the "current reading" marker
-const DiamondDot = (props) => {
-  const { cx, cy } = props
-  if (!cx || !cy) return null
-  return (
-    <polygon
-      points={`${cx},${cy-10} ${cx+8},${cy} ${cx},${cy+10} ${cx-8},${cy}`}
-      fill="#ffffff"
-      stroke="#ffffff"
-      strokeWidth={2}
-      filter="drop-shadow(0 0 6px rgba(255,255,255,0.8))"
-    />
-  )
-}
 
 export default function WeatherClusters() {
   const [activeTab, setActiveTab] = useState("scatter")
@@ -34,17 +20,9 @@ export default function WeatherClusters() {
   const [descsLoading, setDescsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [xAxis, setXAxis] = useState("temperature")
-  const [yAxis, setYAxis] = useState("humidity")
-
-  const featureOptions = [
-    { key: "temperature", label: "Temperature (\u00b0C)" },
-    { key: "humidity", label: "Humidity (%)" },
-    { key: "precipitation", label: "Precipitation (mm)" },
-    { key: "wind_speed", label: "Wind Speed (km/h)" },
-    { key: "uv_index", label: "UV Index" },
-    { key: "apparent_temperature", label: "Feels Like (\u00b0C)" },
-  ]
+  const [scatterMode, setScatterMode] = useState("features") // "features" or "pca"
+  const [pcaData, setPcaData] = useState(null)
+  const [pcaLoading, setPcaLoading] = useState(false)
 
   // Load scatter + elbow data on mount
   useEffect(() => {
@@ -99,6 +77,23 @@ export default function WeatherClusters() {
     loadDescs()
   }, [])
 
+  // Load PCA data when mode switches to PCA
+  useEffect(() => {
+    if (scatterMode !== "pca" || pcaData) return
+    async function loadPCA() {
+      setPcaLoading(true)
+      try {
+        const res = await fetchPCA()
+        setPcaData(res.data)
+      } catch (err) {
+        console.error("Failed to load PCA data", err)
+      } finally {
+        setPcaLoading(false)
+      }
+    }
+    loadPCA()
+  }, [scatterMode, pcaData])
+
   if (loading) {
     return (
       <div className="card-base" style={{padding: "48px", textAlign: "center", marginTop: "24px"}}>
@@ -120,55 +115,139 @@ export default function WeatherClusters() {
 
   const clusters = scatterData.clusters || []
   const points = scatterData.points || []
-
-  // Build current reading point for the scatter chart
-  const currentPoint = currentCluster ? {
-    [xAxis]: currentCluster.conditions?.[xAxis] ?? currentCluster.conditions?.temperature ?? 0,
-    [yAxis]: currentCluster.conditions?.[yAxis] ?? currentCluster.conditions?.humidity ?? 0,
-    cluster: currentCluster.cluster_id,
-    isCurrent: true,
-    temperature: currentCluster.conditions?.temperature,
-    humidity: currentCluster.conditions?.humidity,
-    precipitation: currentCluster.conditions?.precip_prob,
-    wind_speed: currentCluster.conditions?.wind_speed,
-    uv_index: currentCluster.conditions?.uv_index,
-    apparent_temperature: currentCluster.conditions?.apparent_temperature,
-  } : null
+  const activeClusterId = currentCluster?.cluster_id
 
   const tabs = [
     { id: "scatter", label: "Cluster Scatter" },
     { id: "elbow", label: "Elbow Method" },
   ]
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (!active || !payload || !payload.length) return null
-    const d = payload[0]?.payload
-    if (!d) return null
-    const cluster = clusters.find(c => c.id === d.cluster)
-    return (
-      <div style={{
-        background: "var(--c-surface)",
-        border: "1px solid var(--c-border)",
-        borderRadius: "var(--radius-md)",
-        padding: "12px",
-        boxShadow: "var(--shadow-lg)",
-        fontSize: "12px"
-      }}>
-        {d.isCurrent && (
-          <div style={{fontWeight: "700", color: "#ffffff", marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px"}}>
-            Current Reading
-          </div>
-        )}
-        <div style={{fontWeight: "700", color: CLUSTER_COLORS[d.cluster % CLUSTER_COLORS.length], marginBottom: "6px"}}>
-          {cluster?.label || `Cluster ${d.cluster}`}
-        </div>
-        <div style={{color: "var(--c-text-secondary)"}}>Temp: {d.temperature}\u00b0C</div>
-        <div style={{color: "var(--c-text-secondary)"}}>Humidity: {d.humidity}%</div>
-        <div style={{color: "var(--c-text-secondary)"}}>Precip: {d.precipitation} mm</div>
-        <div style={{color: "var(--c-text-secondary)"}}>Wind: {d.wind_speed} km/h</div>
-        <div style={{color: "var(--c-text-secondary)"}}>UV: {d.uv_index}</div>
-      </div>
-    )
+  // Build Plotly 3D scatter traces for Feature Axes mode
+  const build3DFeatureTraces = () => {
+    const traces = []
+    // Group points by cluster
+    const grouped = {}
+    points.forEach(p => {
+      if (!grouped[p.cluster]) grouped[p.cluster] = []
+      grouped[p.cluster].push(p)
+    })
+
+    Object.keys(grouped).forEach(cid => {
+      const clusterPoints = grouped[cid]
+      const cluster = clusters.find(c => c.id === parseInt(cid))
+      const color = CLUSTER_COLORS[parseInt(cid) % CLUSTER_COLORS.length]
+      traces.push({
+        type: "scatter3d",
+        mode: "markers",
+        name: cluster?.label || `Cluster ${cid}`,
+        x: clusterPoints.map(p => p.humidity),
+        y: clusterPoints.map(p => p.temperature),
+        z: clusterPoints.map(p => p.precipitation),
+        marker: {
+          size: 3,
+          color: color,
+          opacity: 0.6,
+        },
+        hovertemplate:
+          `<b>${cluster?.label}</b><br>` +
+          "Humidity: %{x}%<br>" +
+          "Temp: %{y}\u00b0C<br>" +
+          "Precip: %{z}mm<br>" +
+          "<extra></extra>"
+      })
+    })
+
+    // Add current reading as white star
+    if (currentCluster) {
+      const c = currentCluster.conditions
+      traces.push({
+        type: "scatter3d",
+        mode: "markers",
+        name: "Current Reading",
+        x: [c?.humidity ?? 0],
+        y: [c?.temperature ?? 0],
+        z: [c?.precip_prob ?? 0],
+        marker: {
+          size: 10,
+          color: "#ffffff",
+          symbol: "diamond",
+          line: { color: "#ffffff", width: 2 },
+        },
+        hovertemplate:
+          "<b>Current Reading</b><br>" +
+          "Humidity: %{x}%<br>" +
+          "Temp: %{y}\u00b0C<br>" +
+          "Precip: %{z}mm<br>" +
+          "<extra></extra>"
+      })
+    }
+
+    return traces
+  }
+
+  // Build Plotly 3D scatter traces for PCA mode
+  const build3DPCATraces = () => {
+    if (!pcaData || !pcaData.points) return []
+    const traces = []
+    const grouped = {}
+    pcaData.points.forEach(p => {
+      if (!grouped[p.cluster]) grouped[p.cluster] = []
+      grouped[p.cluster].push(p)
+    })
+
+    Object.keys(grouped).forEach(cid => {
+      const clusterPoints = grouped[cid]
+      const color = CLUSTER_COLORS[parseInt(cid) % CLUSTER_COLORS.length]
+      const label = clusterPoints[0]?.cluster_label || `Cluster ${cid}`
+      traces.push({
+        type: "scatter3d",
+        mode: "markers",
+        name: label,
+        x: clusterPoints.map(p => p.pc1),
+        y: clusterPoints.map(p => p.pc2),
+        z: clusterPoints.map(p => p.pc3),
+        marker: {
+          size: 3,
+          color: color,
+          opacity: 0.6,
+        },
+        hovertemplate:
+          `<b>${label}</b><br>` +
+          "PC1: %{x:.2f}<br>" +
+          "PC2: %{y:.2f}<br>" +
+          "PC3: %{z:.2f}<br>" +
+          "<extra></extra>"
+      })
+    })
+
+    return traces
+  }
+
+  const variance = pcaData?.variance || [0, 0, 0]
+
+  const featureLayout = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#94a3b8", size: 11 },
+    margin: { l: 0, r: 0, t: 30, b: 0 },
+    scene: {
+      xaxis: { title: "Humidity (%)", gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      yaxis: { title: "Temperature (\u00b0C)", gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      zaxis: { title: "Precipitation (mm)", gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      bgcolor: "rgba(0,0,0,0)",
+    },
+    legend: { x: 0, y: 1, font: { size: 11 } },
+    showlegend: true,
+  }
+
+  const pcaLayout = {
+    ...featureLayout,
+    scene: {
+      xaxis: { title: `PC1 (${variance[0]}%)`, gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      yaxis: { title: `PC2 (${variance[1]}%)`, gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      zaxis: { title: `PC3 (${variance[2]}%)`, gridcolor: "rgba(148,163,184,0.15)", backgroundcolor: "rgba(0,0,0,0)" },
+      bgcolor: "rgba(0,0,0,0)",
+    },
   }
 
   const ElbowTooltip = ({ active, payload }) => {
@@ -189,31 +268,29 @@ export default function WeatherClusters() {
     )
   }
 
-  const AxisSelector = ({ label, value, onChange }) => (
-    <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-      <span style={{fontSize: "12px", color: "var(--c-text-muted)", fontWeight: "600"}}>{label}:</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: "var(--c-surface)",
-          color: "var(--c-text-primary)",
-          border: "1px solid var(--c-border)",
-          padding: "4px 8px",
-          borderRadius: "var(--radius-sm)",
-          fontSize: "12px",
-          cursor: "pointer",
-          outline: "none"
-        }}
-      >
-        {featureOptions.map(f => (
-          <option key={f.key} value={f.key}>{f.label}</option>
-        ))}
-      </select>
+  const ModeToggle = ({ value, onChange }) => (
+    <div style={{display: "flex", gap: "4px", background: "var(--c-surface-hover)", padding: "3px", borderRadius: "var(--radius-sm)"}}>
+      {[{id: "features", label: "Feature Axes"}, {id: "pca", label: "PCA Projection"}].map(opt => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          style={{
+            background: value === opt.id ? "var(--c-surface)" : "transparent",
+            border: value === opt.id ? "1px solid var(--c-border)" : "1px solid transparent",
+            color: value === opt.id ? "var(--c-text-primary)" : "var(--c-text-muted)",
+            padding: "4px 12px",
+            borderRadius: "var(--radius-sm)",
+            fontSize: "11px",
+            fontWeight: value === opt.id ? "600" : "500",
+            cursor: "pointer",
+            transition: "all 0.2s"
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   )
-
-  const activeClusterId = currentCluster?.cluster_id
 
   return (
     <div className="card-base" style={{padding: "32px", marginTop: "24px"}}>
@@ -317,7 +394,7 @@ export default function WeatherClusters() {
         <div>
           <h3 className="section-title" style={{margin: 0}}>Weather Pattern Clusters</h3>
           <p style={{fontSize: "12px", color: "var(--c-text-secondary)", marginTop: "4px"}}>
-            K-Means Clustering \u2022 {scatterData.n_clusters} Patterns Identified \u2022 {points.length} Data Points
+            K-Means Clustering {"\u2022"} {scatterData.n_clusters} Patterns Identified {"\u2022"} {points.length} Data Points
           </p>
         </div>
         <div style={{display: "flex", gap: "8px", background: "var(--c-surface-hover)", padding: "4px", borderRadius: "var(--radius-md)"}}>
@@ -344,7 +421,7 @@ export default function WeatherClusters() {
         </div>
       </div>
 
-      {/* Cluster Legend — active cluster is bold/underlined */}
+      {/* Cluster Legend */}
       <div style={{display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "24px", alignItems: "center"}}>
         {clusters.map((c, i) => {
           const isActive = c.id === activeClusterId
@@ -367,7 +444,7 @@ export default function WeatherClusters() {
             </div>
           )
         })}
-        {currentPoint && (
+        {currentCluster && (
           <div style={{display: "flex", alignItems: "center", gap: "8px", marginLeft: "8px"}}>
             <div style={{width: "12px", height: "12px", background: "#ffffff", transform: "rotate(45deg)"}} />
             <span style={{fontSize: "13px", color: "var(--c-text-muted)", fontWeight: "500"}}>Current</span>
@@ -375,56 +452,45 @@ export default function WeatherClusters() {
         )}
       </div>
 
-      {/* SCATTER TAB */}
+      {/* SCATTER TAB — 3D Plotly */}
       {activeTab === "scatter" && (
         <>
-          <div style={{display: "flex", gap: "24px", marginBottom: "16px", flexWrap: "wrap"}}>
-            <AxisSelector label="X-Axis" value={xAxis} onChange={setXAxis} />
-            <AxisSelector label="Y-Axis" value={yAxis} onChange={setYAxis} />
+          <div style={{display: "flex", justifyContent: "flex-end", marginBottom: "12px"}}>
+            <ModeToggle value={scatterMode} onChange={setScatterMode} />
           </div>
-          <div style={{width: "100%", height: "420px"}}>
-            <ResponsiveContainer>
-              <ScatterChart margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--c-border)" />
-                <XAxis
-                  dataKey={xAxis}
-                  type="number"
-                  name={featureOptions.find(f => f.key === xAxis)?.label}
-                  tick={{fill: "var(--c-text-muted)", fontSize: 11}}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  dataKey={yAxis}
-                  type="number"
-                  name={featureOptions.find(f => f.key === yAxis)?.label}
-                  tick={{fill: "var(--c-text-muted)", fontSize: 11}}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                {/* Historical data points */}
-                <Scatter data={points} fill="#8884d8">
-                  {points.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={CLUSTER_COLORS[entry.cluster % CLUSTER_COLORS.length]}
-                      fillOpacity={0.5}
-                      r={3}
-                    />
-                  ))}
-                </Scatter>
-                {/* Current reading as white diamond */}
-                {currentPoint && (
-                  <Scatter
-                    data={[currentPoint]}
-                    shape={<DiamondDot />}
-                    fill="#ffffff"
-                  />
-                )}
-              </ScatterChart>
-            </ResponsiveContainer>
+          <div style={{width: "100%", height: "500px"}}>
+            {scatterMode === "features" ? (
+              <Plot
+                data={build3DFeatureTraces()}
+                layout={featureLayout}
+                config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler
+              />
+            ) : pcaLoading ? (
+              <div style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>
+                <div style={{fontSize: "14px", color: "var(--c-text-muted)"}}>Computing PCA projection...</div>
+              </div>
+            ) : pcaData ? (
+              <Plot
+                data={build3DPCATraces()}
+                layout={pcaLayout}
+                config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler
+              />
+            ) : (
+              <div style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>
+                <span style={{color: "var(--c-text-muted)", fontSize: "14px"}}>Failed to load PCA data.</span>
+              </div>
+            )}
           </div>
+          {scatterMode === "pca" && pcaData && (
+            <div style={{marginTop: "8px", fontSize: "12px", color: "var(--c-text-muted)", textAlign: "center"}}>
+              Total variance explained: {(variance[0] + variance[1] + variance[2]).toFixed(1)}% &mdash;
+              PC1: {variance[0]}% &middot; PC2: {variance[1]}% &middot; PC3: {variance[2]}%
+            </div>
+          )}
         </>
       )}
 
@@ -515,7 +581,7 @@ export default function WeatherClusters() {
                       </div>
                     </td>
                     <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)", fontWeight: "600"}}>{c.count}</td>
-                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.temperature}\u00b0C</td>
+                    <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.temperature}{"\u00b0"}C</td>
                     <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.humidity}%</td>
                     <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.precipitation} mm</td>
                     <td style={{textAlign: "right", padding: "12px 16px", color: "var(--c-text-secondary)"}}>{c.center.wind_speed} km/h</td>

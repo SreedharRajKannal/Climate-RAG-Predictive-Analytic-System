@@ -409,7 +409,7 @@ _cluster_descriptions_cache = None
 @app.get("/clusters/descriptions")
 async def get_cluster_descriptions():
     """
-    Generate human-readable descriptions for all 4 clusters using Ollama.
+    Generate technical descriptions for all 4 clusters using Ollama.
     Calls are run in parallel via asyncio.gather. Results are cached in memory.
     """
     global _cluster_descriptions_cache
@@ -430,6 +430,7 @@ async def get_cluster_descriptions():
 
     # Build Ollama LLM
     from langchain_community.llms import Ollama
+    import os
     ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     ollama_model = os.getenv("OLLAMA_MODEL", "llama3")
     llm = Ollama(model=ollama_model, base_url=ollama_host, temperature=0.3)
@@ -438,29 +439,27 @@ async def get_cluster_descriptions():
         label = cluster["label"]
         center = cluster["center"]
         prompt = (
-            f"A weather cluster called '{label}' was identified in Trivandrum's "
-            f"weather data with these average conditions:\n"
-            f"- Temperature: {center['temperature']}\u00b0C\n"
-            f"- Humidity: {center['humidity']}%\n"
-            f"- Precipitation: {center['precipitation']}mm\n"
-            f"- Wind Speed: {center['wind_speed']} km/h\n"
-            f"- UV Index: {center['uv_index']}\n\n"
-            f"Write 2 sentences describing what this weather pattern feels like to an "
-            f"ordinary person living in Trivandrum. What would they experience on a "
-            f"typical day in this pattern? Use simple everyday language, no technical "
-            f"terms. Do not mention numbers or statistics."
+            f"Weather cluster '{label}' has these centroid values from K-means:\n"
+            f"Temperature: {center['temperature']}\u00b0C, Humidity: {center['humidity']}%, "
+            f"Precipitation: {center['precipitation']}mm, Wind: {center['wind_speed']} km/h, "
+            f"UV Index: {center['uv_index']}, Apparent Temperature: {center['apparent_temperature']}\u00b0C.\n\n"
+            f"In 1-2 sentences, explain technically what defines this cluster \u2014 "
+            f"which parameter values separate it from the other clusters and "
+            f"why those values justify the label '{label}'. "
+            f"Reference specific feature values. Be precise and technical.\n"
+            f"Maximum 2 sentences."
         )
         try:
-            # Run synchronous LLM call in a thread pool to not block the event loop
             import asyncio
             loop = asyncio.get_event_loop()
             description = await loop.run_in_executor(None, llm.invoke, prompt)
             return description.strip()
         except Exception as e:
             print(f"[clusters/descriptions] Ollama failed for '{label}': {e}")
-            return f"A typical {label.lower()} day in Trivandrum."
+            return f"Cluster '{label}' centroid: temp={center['temperature']}\u00b0C, humidity={center['humidity']}%."
 
     # Run all 4 Ollama calls in parallel
+    import asyncio
     descriptions = await asyncio.gather(*[describe_cluster(c) for c in clusters])
 
     result = {
@@ -481,6 +480,16 @@ async def get_cluster_descriptions():
 
 # Cluster colors matching frontend
 CLUSTER_COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"]
+
+
+@app.get("/clusters/pca")
+def get_clusters_pca(sample: int = None):
+    """
+    Run PCA with 3 components on the clustered historical data.
+    Returns PC1, PC2, PC3 per data point plus explained variance ratios.
+    """
+    from clustering import get_pca_data
+    return get_pca_data(sample=sample)
 
 
 # ── WEBSOCKET ─────────────────────────────────────────────

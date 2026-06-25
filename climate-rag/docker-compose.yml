@@ -22,19 +22,13 @@ services:
       retries: 5
 
   ollama:
-<<<<<<< Updated upstream
-    image: ollama/ollama
-=======
     image: ollama/ollama:latest
->>>>>>> Stashed changes
     container_name: climate_ollama
     restart: always
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-<<<<<<< Updated upstream
-=======
     deploy:
       resources:
         reservations:
@@ -42,7 +36,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [ gpu ]
->>>>>>> Stashed changes
 
   api:
     build: ./backend

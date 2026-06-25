@@ -54,3 +54,6 @@ export const fetchCurrentCluster = () =>
 
 export const fetchClusterDescriptions = () => 
   axios.get(`${BASE}/clusters/descriptions`)
+
+export const fetchPCA = () => 
+  axios.get(`${BASE}/clusters/pca`)
