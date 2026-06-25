@@ -87,9 +87,9 @@ def run_elbow_method(df: pd.DataFrame, k_range: range = range(1, 11)) -> list:
 
 def label_cluster(center: dict) -> str:
     """
-    Generate a human-readable label for a cluster based on its centroid values.
-    Uses meteorological heuristics for Trivandrum-like tropical climates.
-    Designed for 4 clusters.
+    Generate a human-readable label using a composite scoring approach.
+    All 6 features contribute to each candidate label's score simultaneously.
+    The highest-scoring label wins, preventing single-feature misclassification.
     """
     temp = center.get("temperature", 25)
     humidity = center.get("humidity", 70)
@@ -98,20 +98,47 @@ def label_cluster(center: dict) -> str:
     uv = center.get("uv_index", 5)
     apparent = center.get("apparent_temperature", temp)
 
-    # Heavy monsoon: very high rain + high humidity
-    if precip > 2.0 and humidity > 85:
-        return "Heavy Monsoon"
+    scores = {}
 
-    # Pre-monsoon heat: high temp + low humidity (dry heat)
-    if temp > 30 and humidity < 70:
-        return "Pre-Monsoon Heat"
+    # Heavy Monsoon: very high precip + very high humidity + moderate temp + low UV + high wind
+    scores["Heavy Monsoon"] = (
+        3.0 * min(precip / 2.0, 2.0) +       # precip > 2mm scores high (max 6.0)
+        2.0 * max(0, (humidity - 80) / 15) +  # humidity > 80 contributes
+        1.5 * max(0, (wind - 8) / 10) +       # wind > 8 contributes
+        1.0 * max(0, (30 - temp) / 10) +      # cooler temp is positive signal
+        1.0 * max(0, (3 - uv) / 3)            # low UV (cloudy/rainy)
+    )
 
-    # Monsoon peak: moderate-high temp + high humidity + some precip
-    if temp > 27 and humidity > 75 and precip > 0.1:
-        return "Monsoon Peak"
+    # Monsoon Peak: moderate precip + high humidity + warm temp + moderate wind
+    scores["Monsoon Peak"] = (
+        2.0 * max(0, (humidity - 70) / 20) +  # humidity > 70 contributes
+        1.5 * min(precip / 1.0, 2.0) +        # some precipitation
+        1.5 * max(0, (temp - 26) / 5) +       # warm (above 26)
+        1.0 * max(0, (apparent - 28) / 5) +   # feels hot
+        0.5 * max(0, (wind - 5) / 10) -       # some wind
+        2.0 * max(0, precip / 3.0 - 1.0)      # penalize very high precip (that's Heavy Monsoon)
+    )
 
-    # Mild overcast: cooler temp, high humidity, low precip
-    return "Mild Overcast"
+    # Pre-Monsoon Heat: high temp + low humidity + low precip + high UV
+    scores["Pre-Monsoon Heat"] = (
+        2.5 * max(0, (temp - 28) / 5) +       # temp > 28 is key
+        2.0 * max(0, (80 - humidity) / 20) +   # low humidity is key
+        1.5 * max(0, (uv - 3) / 7) +          # high UV
+        1.5 * max(0, (apparent - 30) / 5) +    # high apparent temp
+        1.0 * max(0, (0.5 - precip) / 0.5)    # very low precipitation
+    )
+
+    # Mild Overcast: cool temp + high humidity + low precip + low UV
+    scores["Mild Overcast"] = (
+        2.0 * max(0, (28 - temp) / 5) +       # cool temp below 28
+        1.5 * max(0, (humidity - 80) / 15) +   # high humidity
+        1.5 * max(0, (3 - uv) / 3) +          # low UV (overcast)
+        1.0 * max(0, (0.5 - precip) / 0.5) +  # low precip (not raining much)
+        0.5 * max(0, (28 - apparent) / 5)      # comfortable apparent temp
+    )
+
+    # Return the label with the highest composite score
+    return max(scores, key=scores.get)
 
 
 def run_kmeans(df: pd.DataFrame) -> dict:
@@ -247,6 +274,65 @@ def get_scatter_data(sample: int = None) -> dict:
         points = [points[i] for i in sorted(indices)]
 
     return {
+        "n_clusters": results["n_clusters"],
+        "clusters": results["clusters"],
+        "points": points,
+    }
+
+
+def get_pca_data(sample: int = None) -> dict:
+    """
+    Run PCA with 3 components on the clustered historical data.
+    Returns PC1, PC2, PC3 per data point plus explained variance ratios.
+    """
+    from sklearn.decomposition import PCA
+
+    results = get_cluster_results()
+    if "error" in results:
+        return {"error": results["error"]}
+
+    df = load_historical_data()
+    if df.empty:
+        return {"error": "No historical data"}
+
+    X = df[CLUSTER_FEATURES].fillna(0)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Fit PCA with 3 components
+    pca = PCA(n_components=3, random_state=42)
+    X_pca = pca.fit_transform(X_scaled)
+
+    # Get explained variance ratios as percentages
+    variance = [round(float(v * 100), 1) for v in pca.explained_variance_ratio_]
+
+    # Get cluster labels from the fitted model
+    km_model, km_scaler = load_saved_models()
+    if km_model is None:
+        return {"error": "No fitted model. Run /clusters first."}
+
+    labels = km_model.predict(km_scaler.transform(X))
+    cluster_labels = get_cluster_labels()
+
+    points = []
+    for i in range(len(X_pca)):
+        cluster_id = int(labels[i])
+        points.append({
+            "pc1": round(float(X_pca[i][0]), 4),
+            "pc2": round(float(X_pca[i][1]), 4),
+            "pc3": round(float(X_pca[i][2]), 4),
+            "cluster": cluster_id,
+            "cluster_label": cluster_labels.get(cluster_id, f"Cluster {cluster_id}"),
+        })
+
+    # Random sample for performance
+    if sample and sample < len(points):
+        rng = np.random.default_rng(42)
+        indices = rng.choice(len(points), size=sample, replace=False)
+        points = [points[i] for i in sorted(indices)]
+
+    return {
+        "variance": variance,
         "n_clusters": results["n_clusters"],
         "clusters": results["clusters"],
         "points": points,

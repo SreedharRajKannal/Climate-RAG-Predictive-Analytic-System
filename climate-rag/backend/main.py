@@ -403,6 +403,94 @@ def get_current_cluster():
         }
     }
 
+# In-memory cache for cluster descriptions (only regenerated on model retrain)
+_cluster_descriptions_cache = None
+
+@app.get("/clusters/descriptions")
+async def get_cluster_descriptions():
+    """
+    Generate technical descriptions for all 4 clusters using Ollama.
+    Calls are run in parallel via asyncio.gather. Results are cached in memory.
+    """
+    global _cluster_descriptions_cache
+
+    if _cluster_descriptions_cache is not None:
+        return _cluster_descriptions_cache
+
+    # Get cluster data
+    results = get_cluster_results()
+    if "error" in results:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"error": results["error"]})
+
+    clusters = results.get("clusters", [])
+    if not clusters:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"error": "No clusters available"})
+
+    # Build Ollama LLM
+    from langchain_community.llms import Ollama
+    import os
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_model = os.getenv("OLLAMA_MODEL", "llama3")
+    llm = Ollama(model=ollama_model, base_url=ollama_host, temperature=0.3)
+
+    async def describe_cluster(cluster):
+        label = cluster["label"]
+        center = cluster["center"]
+        prompt = (
+            f"Weather cluster '{label}' has these centroid values from K-means:\n"
+            f"Temperature: {center['temperature']}\u00b0C, Humidity: {center['humidity']}%, "
+            f"Precipitation: {center['precipitation']}mm, Wind: {center['wind_speed']} km/h, "
+            f"UV Index: {center['uv_index']}, Apparent Temperature: {center['apparent_temperature']}\u00b0C.\n\n"
+            f"In 1-2 sentences, explain technically what defines this cluster \u2014 "
+            f"which parameter values separate it from the other clusters and "
+            f"why those values justify the label '{label}'. "
+            f"Reference specific feature values. Be precise and technical.\n"
+            f"Maximum 2 sentences."
+        )
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            description = await loop.run_in_executor(None, llm.invoke, prompt)
+            return description.strip()
+        except Exception as e:
+            print(f"[clusters/descriptions] Ollama failed for '{label}': {e}")
+            return f"Cluster '{label}' centroid: temp={center['temperature']}\u00b0C, humidity={center['humidity']}%."
+
+    # Run all 4 Ollama calls in parallel
+    import asyncio
+    descriptions = await asyncio.gather(*[describe_cluster(c) for c in clusters])
+
+    result = {
+        "descriptions": [
+            {
+                "cluster_id": c["id"],
+                "cluster_label": c["label"],
+                "color": CLUSTER_COLORS[i % len(CLUSTER_COLORS)],
+                "description": descriptions[i],
+            }
+            for i, c in enumerate(clusters)
+        ]
+    }
+
+    # Cache the result
+    _cluster_descriptions_cache = result
+    return result
+
+# Cluster colors matching frontend
+CLUSTER_COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"]
+
+
+@app.get("/clusters/pca")
+def get_clusters_pca(sample: int = None):
+    """
+    Run PCA with 3 components on the clustered historical data.
+    Returns PC1, PC2, PC3 per data point plus explained variance ratios.
+    """
+    from clustering import get_pca_data
+    return get_pca_data(sample=sample)
+
 
 # ── WEBSOCKET ─────────────────────────────────────────────
 
